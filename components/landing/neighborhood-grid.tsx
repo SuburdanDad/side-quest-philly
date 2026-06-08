@@ -66,7 +66,7 @@ export function NeighborhoodGrid() {
       {!expanded && (
         <button
           onClick={() => setExpanded(true)}
-          className="w-full mt-2 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-dashed border-muted-foreground/20 text-muted-foreground hover:text-foreground hover:border-foreground/20 transition-colors"
+          className="w-full mt-2 flex items-center justify-center gap-1.5 py-3 rounded-xl border border-dashed border-muted-foreground/20 text-muted-foreground hover:text-foreground hover:border-foreground/20 transition-colors min-h-[44px]"
         >
           <MapPin className="h-3.5 w-3.5" />
           <span className="text-[12px] font-semibold">

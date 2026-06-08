@@ -41,18 +41,18 @@ export function Hero() {
         {user ? (
           <button
             onClick={() => signOut()}
-            className="inline-flex items-center gap-1.5 text-[11px] text-white/60 hover:text-white transition-colors px-2 py-1"
+            className="inline-flex items-center gap-1.5 text-[11px] text-white/60 hover:text-white transition-colors px-3 py-2.5 min-h-[44px]"
           >
-            <User className="h-3 w-3" />
+            <User className="h-3.5 w-3.5" />
             {user.email?.split("@")[0]}
-            <LogOut className="h-2.5 w-2.5" />
+            <LogOut className="h-3 w-3" />
           </button>
         ) : (
           <Link
             href="/login"
-            className="inline-flex items-center gap-1.5 text-[11px] text-white/60 hover:text-white transition-colors px-2 py-1"
+            className="inline-flex items-center gap-1.5 text-[11px] text-white/60 hover:text-white transition-colors px-3 py-2.5 min-h-[44px]"
           >
-            <User className="h-3 w-3" />
+            <User className="h-3.5 w-3.5" />
             Sign in
           </Link>
         )}
