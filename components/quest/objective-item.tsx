@@ -4,6 +4,9 @@ import { useState } from "react";
 import { ChevronDown, Lightbulb } from "lucide-react";
 import type { Objective } from "@/lib/types";
 import { useQuestProgress } from "@/lib/hooks/use-quest-progress";
+import { useGamification } from "@/lib/hooks/use-gamification";
+import { NEIGHBORHOODS } from "@/lib/data/neighborhoods";
+import { CATEGORY_XP } from "@/lib/gamification/xp";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CategoryBadge } from "./category-badge";
 
@@ -18,16 +21,37 @@ export function ObjectiveItem({
   index,
   onComplete,
 }: ObjectiveItemProps) {
-  const { isCompleted, toggleObjective } = useQuestProgress();
+  const { isCompleted, toggleObjective, progress } = useQuestProgress();
+  const { recordObjectiveCompletion, removeObjectiveCompletion } = useGamification();
   const [expanded, setExpanded] = useState(false);
   const [showHint, setShowHint] = useState(false);
+  const [xpFlash, setXpFlash] = useState(false);
   const completed = isCompleted(objective.id);
 
   function handleToggle() {
     const wasCompleted = completed;
     toggleObjective(objective.id);
-    if (!wasCompleted && onComplete) {
-      onComplete();
+
+    if (!wasCompleted) {
+      // Compute the "future" progress state after this toggle
+      const newCompleted = [...progress.completedObjectives, objective.id];
+      const newCompletedNeighborhoods = NEIGHBORHOODS
+        .filter((n) => n.objectives.every((o) => newCompleted.includes(o.id)))
+        .map((n) => n.id);
+
+      recordObjectiveCompletion(objective.id, {
+        ...progress,
+        completedObjectives: newCompleted,
+        completedNeighborhoods: newCompletedNeighborhoods,
+      });
+
+      // XP flash
+      setXpFlash(true);
+      setTimeout(() => setXpFlash(false), 1500);
+
+      if (onComplete) onComplete();
+    } else {
+      removeObjectiveCompletion(objective.id);
     }
   }
 
@@ -47,11 +71,18 @@ export function ObjectiveItem({
           <div className="flex items-center gap-2 flex-wrap mb-1">
             <CategoryBadge category={objective.category} />
           </div>
-          <h3
-            className={`font-semibold text-sm sm:text-base transition-all ${completed ? "line-through text-muted-foreground" : ""}`}
-          >
-            {objective.title}
-          </h3>
+          <div className="flex items-center gap-2">
+            <h3
+              className={`font-semibold text-sm sm:text-base transition-all ${completed ? "line-through text-muted-foreground" : ""}`}
+            >
+              {objective.title}
+            </h3>
+            {xpFlash && (
+              <span className="text-[10px] font-black text-[#C9A84C] animate-bounce">
+                +{CATEGORY_XP[objective.category]} XP
+              </span>
+            )}
+          </div>
           <p className="text-sm text-muted-foreground mt-1">
             {objective.description}
           </p>
