@@ -27,6 +27,15 @@ export default function PassportPage() {
       progress.completedNeighborhoods.includes(n.id) ? n.emoji : "⬜",
     );
 
+    // Build share URL with OG params so the link unfurls with a passport image
+    const ogParams = new URLSearchParams({
+      xp: String(xp),
+      stamps: progress.completedNeighborhoods.join(","),
+      a: String(gamification.achievements.length),
+      obj: String(progress.completedObjectives.length),
+    });
+    const shareUrl = `https://sidequestphilly.com/passport?${ogParams.toString()}`;
+
     const text = [
       `🗺️ Side Quest Philadelphia`,
       ``,
@@ -36,12 +45,12 @@ export default function PassportPage() {
       ``,
       `${completed}/${total} neighborhoods | ${xp} XP`,
       ``,
-      `sidequestphilly.com`,
+      shareUrl,
     ].join("\n");
 
     if (navigator.share) {
       try {
-        await navigator.share({ text });
+        await navigator.share({ text, url: shareUrl });
       } catch {
         // User cancelled
       }

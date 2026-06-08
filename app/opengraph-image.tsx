@@ -91,9 +91,9 @@ export default async function Image() {
             <span style={{ color: "rgba(255,255,255,0.3)" }}>|</span>
             <span>⚾ All-Star Game</span>
             <span style={{ color: "rgba(255,255,255,0.3)" }}>|</span>
-            <span>6 Neighborhoods</span>
+            <span>9 Neighborhoods</span>
             <span style={{ color: "rgba(255,255,255,0.3)" }}>|</span>
-            <span>30 Quests</span>
+            <span>45 Objectives</span>
           </div>
         </div>
       </div>
