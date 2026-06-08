@@ -2,14 +2,13 @@
 
 import { useState, useRef } from "react";
 import Link from "next/link";
-import { ArrowLeft, RotateCcw } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import type { Neighborhood } from "@/lib/types";
 import { useQuestProgress } from "@/lib/hooks/use-quest-progress";
 import { ProgressRing } from "@/components/quest/progress-ring";
 import { ObjectiveItem } from "@/components/quest/objective-item";
 import { CompletionModal } from "@/components/quest/completion-modal";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 
 type QuestPageClientProps = {
   neighborhood: Neighborhood;
@@ -33,39 +32,68 @@ export function QuestPageClient({ neighborhood }: QuestPageClientProps) {
 
   return (
     <main className="flex-1">
-      <div
-        className="h-2 w-full"
-        style={{ backgroundColor: neighborhood.color }}
-      />
+      {/* Neighborhood hero with background photo */}
+      <section className="relative overflow-hidden text-white">
+        <div
+          className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+          style={{
+            backgroundImage: `url('/neighborhoods/${neighborhood.slug}.jpg')`,
+          }}
+        />
+        {/* Color-tinted overlay using neighborhood color */}
+        <div
+          className="absolute inset-0"
+          style={{
+            background: `linear-gradient(to bottom, ${neighborhood.color}cc 0%, ${neighborhood.color}99 50%, ${neighborhood.color}dd 100%)`,
+          }}
+        />
 
-      <div className="mx-auto max-w-2xl px-4 py-8">
-        <Link
-          href="/"
-          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          All Quests
-        </Link>
+        {/* Top bar in neighborhood color */}
+        <div
+          className="absolute top-0 left-0 right-0 h-1.5 z-10"
+          style={{ backgroundColor: neighborhood.color }}
+        />
 
-        <div className="flex items-start justify-between mb-2">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-3xl">{neighborhood.emoji}</span>
-              <h1 className="text-3xl font-bold">{neighborhood.name}</h1>
+        <div className="relative mx-auto max-w-lg px-4 pt-6 pb-6">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1.5 text-sm text-white/70 hover:text-white transition-colors mb-4"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            All Quests
+          </Link>
+
+          <div className="flex items-start justify-between">
+            <div>
+              <div className="flex items-center gap-2.5 mb-1.5">
+                <span className="text-4xl drop-shadow-lg">{neighborhood.emoji}</span>
+                <h1 className="text-3xl font-black tracking-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.4)]">
+                  {neighborhood.name}
+                </h1>
+              </div>
+              <p className="text-white/80 italic text-sm drop-shadow-sm">
+                &ldquo;{neighborhood.tagline}&rdquo;
+              </p>
             </div>
-            <p className="text-muted-foreground italic">
-              &ldquo;{neighborhood.tagline}&rdquo;
-            </p>
+            <div className="flex-shrink-0 bg-white/15 backdrop-blur-md rounded-full p-1.5">
+              <ProgressRing done={done} total={total} size={52} strokeWidth={3} />
+            </div>
           </div>
-          <ProgressRing done={done} total={total} size={64} strokeWidth={4} />
+
+          <p className="text-white/70 text-sm mt-3 leading-relaxed drop-shadow-sm">
+            {neighborhood.description}
+          </p>
         </div>
 
-        <p className="text-muted-foreground mb-6">{neighborhood.description}</p>
+        {/* Bottom fade into page */}
+        <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-background to-transparent" />
+      </section>
 
+      <div className="mx-auto max-w-lg px-4 py-6">
         {isComplete && (
-          <div className="mb-6 rounded-xl border-2 border-primary/20 bg-primary/[0.03] p-4 text-center">
+          <div className="mb-4 rounded-xl border-2 p-4 text-center" style={{ borderColor: neighborhood.color + "40", backgroundColor: neighborhood.color + "08" }}>
             <div
-              className="inline-flex items-center justify-center w-16 h-16 rounded-full border-4 border-dashed mb-2"
+              className="inline-flex items-center justify-center w-14 h-14 rounded-full border-4 border-dashed mb-2"
               style={{
                 borderColor: neighborhood.color,
                 color: neighborhood.color,
@@ -73,15 +101,17 @@ export function QuestPageClient({ neighborhood }: QuestPageClientProps) {
             >
               <span className="text-2xl">{neighborhood.emoji}</span>
             </div>
-            <p className="font-semibold text-primary">
+            <p className="font-bold text-sm" style={{ color: neighborhood.color }}>
               Quest Complete — Stamp Earned!
             </p>
           </div>
         )}
 
-        <Separator className="mb-6" />
+        <h2 className="text-xs font-black uppercase tracking-wide text-muted-foreground mb-3">
+          Objectives · {done}/{total}
+        </h2>
 
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           {neighborhood.objectives.map((objective, index) => (
             <ObjectiveItem
               key={objective.id}

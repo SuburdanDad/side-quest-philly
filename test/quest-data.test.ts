@@ -11,8 +11,8 @@ const VALID_CATEGORIES: ObjectiveCategory[] = [
 ];
 
 describe("Quest data integrity", () => {
-  it("has exactly 6 neighborhoods", () => {
-    expect(NEIGHBORHOODS).toHaveLength(6);
+  it("has exactly 9 neighborhoods", () => {
+    expect(NEIGHBORHOODS).toHaveLength(9);
   });
 
   it("each neighborhood has exactly 5 objectives", () => {
@@ -21,8 +21,8 @@ describe("Quest data integrity", () => {
     }
   });
 
-  it("total objectives is 30", () => {
-    expect(getAllObjectives()).toHaveLength(30);
+  it("total objectives is 45", () => {
+    expect(getAllObjectives()).toHaveLength(45);
   });
 
   it("all objective IDs are unique", () => {

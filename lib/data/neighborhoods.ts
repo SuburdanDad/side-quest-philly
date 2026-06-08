@@ -6,9 +6,23 @@ import {
   NORTHERN_LIBERTIES_OBJECTIVES,
   SOUTH_PHILLY_OBJECTIVES,
   STADIUM_OBJECTIVES,
+  CHINATOWN_OBJECTIVES,
+  MANAYUNK_OBJECTIVES,
+  UNIVERSITY_CITY_OBJECTIVES,
 } from "./quests";
 
 export const NEIGHBORHOODS: Neighborhood[] = [
+  {
+    id: "old-city",
+    slug: "old-city",
+    name: "Old City",
+    tagline: "America started here",
+    description:
+      "Cobblestone streets, colonial history, and a thriving art gallery scene steps from the Liberty Bell.",
+    emoji: "🔔",
+    color: "#B45309",
+    objectives: OLD_CITY_OBJECTIVES,
+  },
   {
     id: "rittenhouse",
     slug: "rittenhouse",
@@ -26,21 +40,21 @@ export const NEIGHBORHOODS: Neighborhood[] = [
     name: "Midtown Village",
     tagline: "Culture, flavor, and zero chill",
     description:
-      "Home to the Gayborhood, Chinatown, and Reading Terminal Market — Philly's most eclectic neighborhood.",
+      "Home to the Gayborhood and Reading Terminal Market — Philly's most eclectic neighborhood.",
     emoji: "🌈",
     color: "#7C3AED",
     objectives: MIDTOWN_VILLAGE_OBJECTIVES,
   },
   {
-    id: "old-city",
-    slug: "old-city",
-    name: "Old City",
-    tagline: "America started here",
+    id: "chinatown",
+    slug: "chinatown",
+    name: "Chinatown",
+    tagline: "Flavor, history, and karaoke",
     description:
-      "Cobblestone streets, colonial history, and a thriving art gallery scene steps from the Liberty Bell.",
-    emoji: "🔔",
-    color: "#B45309",
-    objectives: OLD_CITY_OBJECTIVES,
+      "One of the oldest Chinatowns in the US, packed with incredible food, cultural landmarks, and the iconic Friendship Gate.",
+    emoji: "🏮",
+    color: "#DC2626",
+    objectives: CHINATOWN_OBJECTIVES,
   },
   {
     id: "northern-liberties",
@@ -61,8 +75,30 @@ export const NEIGHBORHOODS: Neighborhood[] = [
     description:
       "The soul of Philadelphia — the Italian Market, East Passyunk dining, and the iconic Art Museum steps.",
     emoji: "🥊",
-    color: "#DC2626",
+    color: "#E81828",
     objectives: SOUTH_PHILLY_OBJECTIVES,
+  },
+  {
+    id: "university-city",
+    slug: "university-city",
+    name: "University City",
+    tagline: "Brains, food trucks, and river views",
+    description:
+      "Home to Penn and Drexel, world-class museums, the best food truck scene in the city, and the floating Schuylkill boardwalk.",
+    emoji: "🎓",
+    color: "#1E40AF",
+    objectives: UNIVERSITY_CITY_OBJECTIVES,
+  },
+  {
+    id: "manayunk",
+    slug: "manayunk",
+    name: "Manayunk",
+    tagline: "The hill will test you",
+    description:
+      "A riverside neighborhood with a historic canal, steep hills, craft breweries, and a Main Street packed with restaurants.",
+    emoji: "🚵",
+    color: "#65A30D",
+    objectives: MANAYUNK_OBJECTIVES,
   },
   {
     id: "stadium-district",
