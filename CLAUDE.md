@@ -7,12 +7,13 @@ Neighborhood scavenger hunt app for Philadelphia, tied to summer 2026 (FIFA Worl
 - Next.js 16 (App Router) + TypeScript
 - Tailwind CSS v4 + shadcn/ui (base-nova style)
 - canvas-confetti for celebrations
-- localStorage for progress (no backend)
+- Supabase Auth (magic link) + Postgres with RLS
+- localStorage for guest progress, Supabase sync on auth
 
 ## Structure
 
 - `lib/types.ts` — Core types (Objective, Neighborhood, QuestProgress)
-- `lib/data/quests.ts` — All 30 objectives (6 neighborhoods x 5)
+- `lib/data/quests.ts` — All 45 objectives (9 neighborhoods x 5)
 - `lib/data/neighborhoods.ts` — Neighborhood metadata + objective assembly
 - `lib/data/events.ts` — Summer 2026 event info
 - `lib/hooks/use-quest-progress.ts` — localStorage hook with useSyncExternalStore

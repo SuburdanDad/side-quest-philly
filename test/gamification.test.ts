@@ -133,8 +133,8 @@ describe("Level system", () => {
 // ─── Achievements ────────────────────────────────────────────
 
 describe("Achievement definitions", () => {
-  it("has 15 achievements", () => {
-    expect(ACHIEVEMENTS).toHaveLength(15);
+  it("has 16 achievements", () => {
+    expect(ACHIEVEMENTS).toHaveLength(16);
   });
 
   it("all achievement IDs are unique", () => {

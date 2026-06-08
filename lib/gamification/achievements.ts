@@ -1,6 +1,7 @@
 import type { Achievement } from "./types";
 import type { QuestProgress } from "@/lib/types";
 import { NEIGHBORHOODS } from "@/lib/data/neighborhoods";
+import { TIMS_FAVORITES } from "@/lib/data/secret-quests";
 
 export const ACHIEVEMENTS: Achievement[] = [
   // Completion-based
@@ -119,6 +120,15 @@ export const ACHIEVEMENTS: Achievement[] = [
     icon: "\u{1F514}",
     dateRange: { start: "2026-06-01", end: "2026-09-07" },
   },
+
+  // Secret quest
+  {
+    id: "inner-circle",
+    name: "Inner Circle",
+    description: "Complete Tim's Favorites secret quest",
+    rarity: "legendary",
+    icon: "🤫",
+  },
 ];
 
 const allObjectives = NEIGHBORHOODS.flatMap((n) => n.objectives);
@@ -216,6 +226,12 @@ export function checkAchievements(
           progress,
           "old-city",
           achievement.dateRange!,
+        );
+        break;
+
+      case "inner-circle":
+        earned = TIMS_FAVORITES.objectives.every((o) =>
+          progress.completedObjectives.includes(o.id),
         );
         break;
     }

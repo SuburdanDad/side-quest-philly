@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Trophy, Stamp } from "lucide-react";
 import { Hero } from "@/components/landing/hero";
 import { NeighborhoodGrid } from "@/components/landing/neighborhood-grid";
+import { SecretQuestCTA } from "@/components/landing/secret-quest-cta";
 import { ULTIMATE_QUEST_IDS } from "@/lib/data/quests";
 import { NEIGHBORHOODS } from "@/lib/data/neighborhoods";
 
@@ -59,6 +60,9 @@ export default function Home() {
           </div>
           <NeighborhoodGrid />
         </section>
+
+        {/* Secret quest CTA */}
+        <SecretQuestCTA />
 
         {/* Passport CTA */}
         <section>
