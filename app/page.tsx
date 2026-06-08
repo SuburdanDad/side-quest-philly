@@ -14,7 +14,7 @@ export default function Home() {
       <div className="mx-auto max-w-lg px-4 py-6 space-y-6">
         {/* How it works - bold numbered steps */}
         <section className="bg-card border rounded-xl p-4">
-          <h2 className="text-sm font-black uppercase tracking-wide mb-3">
+          <h2 className="font-heading text-xl font-normal italic mb-3">
             How It Works
           </h2>
           <div className="grid grid-cols-3 gap-3 text-center">
@@ -51,7 +51,7 @@ export default function Home() {
         {/* Neighborhood quests */}
         <section>
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-black uppercase tracking-wide">
+            <h2 className="font-heading text-xl font-normal italic">
               Choose Your Quest
             </h2>
             <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">
