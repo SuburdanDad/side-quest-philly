@@ -92,7 +92,7 @@ export function Hero() {
             <p className="text-[10px] font-bold uppercase tracking-wide">
               World Cup
             </p>
-            <p className="text-[9px] text-white/50 mt-0.5">Jun 11 - Jul 19</p>
+            <p className="text-[10px] text-white/50 mt-0.5">Jun 11 - Jul 19</p>
           </div>
           <div className="flex-1 bg-[#C9A84C]/25 backdrop-blur-md border border-[#C9A84C]/40 rounded-xl p-2.5 text-center">
             <span className="text-2xl block mb-0.5">🔔</span>
@@ -102,7 +102,7 @@ export function Hero() {
             <p className="text-[10px] font-bold uppercase tracking-wide text-[#C9A84C]">
               250
             </p>
-            <p className="text-[9px] text-[#C9A84C]/60 mt-0.5">All Summer</p>
+            <p className="text-[10px] text-[#C9A84C]/60 mt-0.5">All Summer</p>
           </div>
           <div className="flex-1 bg-black/30 backdrop-blur-md border border-white/15 rounded-xl p-2.5 text-center">
             <span className="text-2xl block mb-0.5">⚾</span>
@@ -112,7 +112,7 @@ export function Hero() {
             <p className="text-[10px] font-bold uppercase tracking-wide">
               All-Star
             </p>
-            <p className="text-[9px] text-white/50 mt-0.5">Jul 13 - 15</p>
+            <p className="text-[10px] text-white/50 mt-0.5">Jul 13 - 15</p>
           </div>
         </div>
 
