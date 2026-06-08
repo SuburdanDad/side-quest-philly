@@ -70,11 +70,11 @@ export function Hero() {
         </div>
 
         {/* Main title */}
-        <h1 className="text-[48px] sm:text-7xl font-black tracking-tight leading-[0.9] mb-1 drop-shadow-[0_2px_10px_rgba(0,0,0,0.5)]">
-          SIDE QUEST
+        <h1 className="font-heading text-[48px] sm:text-7xl font-normal italic tracking-tight leading-[0.9] mb-1 drop-shadow-[0_2px_10px_rgba(0,0,0,0.5)]">
+          Side Quest
         </h1>
-        <p className="text-[42px] sm:text-6xl font-black tracking-tight leading-[0.9] text-[#C9A84C] drop-shadow-[0_2px_10px_rgba(0,0,0,0.5)] mb-4">
-          PHILLY
+        <p className="font-heading text-[42px] sm:text-6xl font-normal italic tracking-tight leading-[0.9] text-[#C9A84C] drop-shadow-[0_2px_10px_rgba(0,0,0,0.5)] mb-4">
+          Philadelphia
         </p>
 
         <p className="text-sm text-white/80 max-w-[300px] mx-auto mb-5 leading-relaxed drop-shadow-[0_1px_3px_rgba(0,0,0,0.5)]">

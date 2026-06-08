@@ -68,7 +68,7 @@ export function QuestPageClient({ neighborhood }: QuestPageClientProps) {
             <div>
               <div className="flex items-center gap-2.5 mb-1.5">
                 <span className="text-4xl drop-shadow-lg">{neighborhood.emoji}</span>
-                <h1 className="text-3xl font-black tracking-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.4)]">
+                <h1 className="font-heading text-3xl font-normal italic tracking-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.4)]">
                   {neighborhood.name}
                 </h1>
               </div>

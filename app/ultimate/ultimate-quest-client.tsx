@@ -86,7 +86,7 @@ export function UltimateQuestClient() {
           <div>
             <div className="flex items-center gap-2 mb-1">
               <Trophy className="h-8 w-8 text-primary" />
-              <h1 className="text-3xl font-bold">The Ultimate Philly Quest</h1>
+              <h1 className="font-heading text-3xl font-normal italic">The Ultimate Philly Quest</h1>
             </div>
             <p className="text-muted-foreground italic">
               &ldquo;Cross the whole city. Earn legendary status.&rdquo;
