@@ -67,7 +67,7 @@ export function SecretQuestClient({ quest }: SecretQuestClientProps) {
               Quest Locked
             </h2>
             <p className="text-sm text-muted-foreground max-w-xs mx-auto">
-              Complete {quest.unlockRequirement} neighborhood quests to unlock
+              Complete {quest.unlockRequirement}{" "}neighborhood quests to unlock
               Tim&apos;s personal favorite spots in Philadelphia. You&apos;ve
               completed{" "}
               <span className="font-bold text-foreground">
