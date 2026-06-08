@@ -22,6 +22,12 @@ export const NEIGHBORHOODS: Neighborhood[] = [
     emoji: "🔔",
     color: "#B45309",
     objectives: OLD_CITY_OBJECTIVES,
+    localSecret: {
+      title: "The Ghost of Benjamin Franklin",
+      description:
+        "Late at night, head to Philosophical Hall on 5th Street. Through the window, you can see a life-size statue of Benjamin Franklin that's been startling passersby since 1824. Locals call it 'the ghost' because the dim lighting makes it look eerily real.",
+      emoji: "👻",
+    },
   },
   {
     id: "rittenhouse",
@@ -33,6 +39,12 @@ export const NEIGHBORHOODS: Neighborhood[] = [
     emoji: "🌳",
     color: "#2D6A4F",
     objectives: RITTENHOUSE_OBJECTIVES,
+    localSecret: {
+      title: "The Secret Garden at 18th & Delancey",
+      description:
+        "Tucked behind an iron gate on Delancey Place near 18th Street is a tiny private garden that's visible through the bars. It's one of the most peaceful spots in Center City, and most people walk right past it. The brownstones on this block are among the most expensive in Philadelphia.",
+      emoji: "🌿",
+    },
   },
   {
     id: "midtown-village",
@@ -44,6 +56,12 @@ export const NEIGHBORHOODS: Neighborhood[] = [
     emoji: "🌈",
     color: "#7C3AED",
     objectives: MIDTOWN_VILLAGE_OBJECTIVES,
+    localSecret: {
+      title: "The Trestle Inn's Go-Go Dancers",
+      description:
+        "At 339 N 11th Street, The Trestle Inn is a whiskey bar with go-go dancers on weekend nights. It feels like stepping into 1960s Philadelphia. The drinks are strong, the music is soul and funk, and the vibe is unlike anything else in the city.",
+      emoji: "💃",
+    },
   },
   {
     id: "chinatown",
@@ -55,6 +73,12 @@ export const NEIGHBORHOODS: Neighborhood[] = [
     emoji: "🏮",
     color: "#DC2626",
     objectives: CHINATOWN_OBJECTIVES,
+    localSecret: {
+      title: "The Secret Speakeasy at Hop Sing Laundromat",
+      description:
+        "At 1029 Race Street, behind an unmarked door, is Hop Sing Laundromat — one of the best cocktail bars in America. No photos inside, no sneakers, no baseball caps. Ring the buzzer and hope they let you in. The cocktails are worth the mystery.",
+      emoji: "🍸",
+    },
   },
   {
     id: "northern-liberties",
@@ -66,6 +90,12 @@ export const NEIGHBORHOODS: Neighborhood[] = [
     emoji: "🎨",
     color: "#0891B2",
     objectives: NORTHERN_LIBERTIES_OBJECTIVES,
+    localSecret: {
+      title: "The Secret Beach at Penn Treaty Park",
+      description:
+        "At the end of Columbia Avenue, Penn Treaty Park has a tiny sandy beach on the Delaware River that most people don't know exists. It's where William Penn supposedly signed his treaty with the Lenape. Bring a blanket and watch the cargo ships pass.",
+      emoji: "🏖️",
+    },
   },
   {
     id: "south-philly",
@@ -77,6 +107,12 @@ export const NEIGHBORHOODS: Neighborhood[] = [
     emoji: "🥊",
     color: "#E81828",
     objectives: SOUTH_PHILLY_OBJECTIVES,
+    localSecret: {
+      title: "The Singing Steps of South Street",
+      description:
+        "At 767 South Street, the Philly Magic Gardens by Isaiah Zagar extend underground. But the real secret is the mosaic steps on nearby side streets — Zagar covered walls, alleys, and stairways for blocks. Walk the alleys between South and Bainbridge from 10th to 7th for a free outdoor art gallery.",
+      emoji: "🎨",
+    },
   },
   {
     id: "university-city",
@@ -88,6 +124,12 @@ export const NEIGHBORHOODS: Neighborhood[] = [
     emoji: "🎓",
     color: "#1E40AF",
     objectives: UNIVERSITY_CITY_OBJECTIVES,
+    localSecret: {
+      title: "The Button That Does Nothing",
+      description:
+        "In the center of Penn's campus at 36th and Locust Walk, there's a large red button on a pedestal. Press it. It does absolutely nothing. The Split Button by Claes Oldenburg is public art that exists purely to be interacted with. Students press it for good luck on exams.",
+      emoji: "🔴",
+    },
   },
   {
     id: "manayunk",
@@ -99,6 +141,12 @@ export const NEIGHBORHOODS: Neighborhood[] = [
     emoji: "🚵",
     color: "#65A30D",
     objectives: MANAYUNK_OBJECTIVES,
+    localSecret: {
+      title: "The Ghost of the Venice Island Rec Center",
+      description:
+        "Venice Island, between the Manayunk Canal and the Schuylkill River, has a modern rec center built on top of a flooded foundation. The building appears to float on water. At sunset, the reflection creates an illusion that the building is sinking. Locals claim it's haunted by the ghosts of the textile workers who once labored here.",
+      emoji: "🏚️",
+    },
   },
   {
     id: "stadium-district",
@@ -110,6 +158,12 @@ export const NEIGHBORHOODS: Neighborhood[] = [
     emoji: "🏟️",
     color: "#004C54",
     objectives: STADIUM_OBJECTIVES,
+    localSecret: {
+      title: "The Secret Tunnel Under Broad Street",
+      description:
+        "Under Broad Street near the stadiums, there's a network of pedestrian tunnels connecting the subway to the sports complex. During game days, thousands of fans stream through. But on off-days, the tunnels are nearly empty — and the acoustics are incredible. Sing, clap, or just listen to your footsteps echo.",
+      emoji: "🚇",
+    },
   },
 ];
 

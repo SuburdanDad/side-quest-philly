@@ -8,6 +8,7 @@ import { useQuestProgress } from "@/lib/hooks/use-quest-progress";
 import { ProgressRing } from "@/components/quest/progress-ring";
 import { ObjectiveItem } from "@/components/quest/objective-item";
 import { CompletionModal } from "@/components/quest/completion-modal";
+import { LocalSecretCard } from "@/components/quest/local-secret-card";
 import { Button } from "@/components/ui/button";
 
 type QuestPageClientProps = {
@@ -121,6 +122,15 @@ export function QuestPageClient({ neighborhood }: QuestPageClientProps) {
             />
           ))}
         </div>
+
+        {/* Local secret — unlockable bonus content */}
+        {neighborhood.localSecret && (
+          <LocalSecretCard
+            secret={neighborhood.localSecret}
+            unlocked={isComplete}
+            neighborhoodColor={neighborhood.color}
+          />
+        )}
 
         <div className="mt-8 flex justify-center">
           <Link href="/">

@@ -13,6 +13,12 @@ export type Objective = {
   funFact?: string;
 };
 
+export type LocalSecret = {
+  title: string;
+  description: string;
+  emoji: string;
+};
+
 export type Neighborhood = {
   id: string;
   slug: string;
@@ -22,6 +28,7 @@ export type Neighborhood = {
   emoji: string;
   color: string;
   objectives: Objective[];
+  localSecret?: LocalSecret;
 };
 
 export type PhillyEvent = {
