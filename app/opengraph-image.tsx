@@ -8,67 +8,13 @@ export const alt =
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-// Patriotic palette
-const RED = "#B22234";
-const WHITE = "#FFFFFF";
-const BLUE = "#3C3B6E";
-
-// Brighter versions for text legibility on dark backgrounds
-const TEXT_RED = "#EF4444";
-const TEXT_BLUE = "#93B4F5";
-
-// Cycle through red, white, blue for each letter
-function patrioticLetters(
-  text: string,
-  fontSize: number,
-  shadow: string,
-) {
-  const colors = [TEXT_RED, WHITE, TEXT_BLUE];
-  let colorIndex = 0;
-
-  return text.split("").map((char, i) => {
-    if (char === " ") {
-      return (
-        <span
-          key={i}
-          style={{
-            fontSize,
-            fontWeight: 800,
-            display: "flex",
-            width: fontSize * 0.25,
-          }}
-        >
-          {" "}
-        </span>
-      );
-    }
-    const color = colors[colorIndex % 3];
-    colorIndex++;
-    return (
-      <span
-        key={i}
-        style={{
-          fontSize,
-          fontWeight: 800,
-          color,
-          display: "flex",
-          textShadow: shadow,
-        }}
-      >
-        {char}
-      </span>
-    );
-  });
-}
+const GOLD = "#C9A84C";
 
 export default async function Image() {
-  // Load the real Philadelphia skyline photo
   const skylineBuffer = await readFile(
     join(process.cwd(), "public/og-skyline.jpg"),
   );
   const skylineBase64 = `data:image/jpeg;base64,${skylineBuffer.toString("base64")}`;
-
-  const textShadow = "0 4px 24px rgba(0,0,0,0.7), 0 2px 8px rgba(0,0,0,0.5)";
 
   return new ImageResponse(
     (
@@ -80,10 +26,10 @@ export default async function Image() {
           position: "relative",
           overflow: "hidden",
           fontFamily: "system-ui, sans-serif",
-          background: BLUE,
+          background: "#0F1D36",
         }}
       >
-        {/* Real skyline photo background */}
+        {/* Skyline photo — full bleed */}
         <img
           src={skylineBase64}
           width={1200}
@@ -98,7 +44,7 @@ export default async function Image() {
           }}
         />
 
-        {/* Dark blue overlay for text readability */}
+        {/* Cinematic gradient overlay — dark at top/bottom, clearer in middle */}
         <div
           style={{
             position: "absolute",
@@ -107,54 +53,12 @@ export default async function Image() {
             right: 0,
             bottom: 0,
             background:
-              "linear-gradient(to bottom, rgba(15,29,54,0.88) 0%, rgba(15,29,54,0.72) 30%, rgba(15,29,54,0.65) 50%, rgba(15,29,54,0.72) 70%, rgba(15,29,54,0.92) 100%)",
+              "linear-gradient(to bottom, rgba(10,18,36,0.92) 0%, rgba(10,18,36,0.55) 35%, rgba(10,18,36,0.4) 50%, rgba(10,18,36,0.6) 70%, rgba(10,18,36,0.95) 100%)",
             display: "flex",
           }}
         />
 
-        {/* Subtle red/blue patriotic tint */}
-        <div
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background:
-              "linear-gradient(135deg, rgba(178,34,52,0.1) 0%, transparent 40%, rgba(60,59,110,0.12) 100%)",
-            display: "flex",
-          }}
-        />
-
-        {/* Top border — navy with white star emojis */}
-        <div
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            height: 28,
-            background: BLUE,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 28,
-          }}
-        >
-          {Array.from({ length: 15 }).map((_, i) => (
-            <span
-              key={i}
-              style={{
-                fontSize: 14,
-                display: "flex",
-              }}
-            >
-              ⭐
-            </span>
-          ))}
-        </div>
-
-        {/* Main content area */}
+        {/* Content */}
         <div
           style={{
             display: "flex",
@@ -164,192 +68,155 @@ export default async function Image() {
             width: "100%",
             height: "100%",
             position: "relative",
-            paddingBottom: 30,
+            padding: "40px 60px",
           }}
         >
-          {/* America 250 badge */}
+          {/* Top badge */}
           <div
             style={{
               display: "flex",
               alignItems: "center",
               gap: 10,
-              marginBottom: 16,
-              padding: "6px 20px",
-              border: "2px solid rgba(255,255,255,0.3)",
+              marginBottom: 20,
+              padding: "8px 24px",
               borderRadius: 999,
-              background: "rgba(60,59,110,0.5)",
+              background: "rgba(201,168,76,0.15)",
+              border: "1.5px solid rgba(201,168,76,0.4)",
             }}
           >
-            <span style={{ fontSize: 18, display: "flex" }}>🇺🇸</span>
+            <span style={{ fontSize: 16, display: "flex" }}>🇺🇸</span>
             <span
               style={{
-                fontSize: 15,
+                fontSize: 14,
                 fontWeight: 700,
-                color: WHITE,
-                letterSpacing: "0.2em",
+                color: GOLD,
+                letterSpacing: "0.25em",
                 textTransform: "uppercase",
                 display: "flex",
               }}
             >
-              America&apos;s 250th
+              Summer 2026
             </span>
             <span
               style={{
-                fontSize: 13,
+                fontSize: 14,
                 fontWeight: 600,
-                color: "rgba(255,255,255,0.5)",
-                letterSpacing: "0.15em",
+                color: "rgba(201,168,76,0.5)",
                 display: "flex",
               }}
             >
-              · Summer 2026
+              ·
+            </span>
+            <span
+              style={{
+                fontSize: 14,
+                fontWeight: 700,
+                color: GOLD,
+                letterSpacing: "0.25em",
+                textTransform: "uppercase",
+                display: "flex",
+              }}
+            >
+              America 250
             </span>
           </div>
 
-          {/* Title — Side Quest — per-letter R/W/B */}
+          {/* SIDE QUEST — massive, white, bold */}
           <div
             style={{
               display: "flex",
-              alignItems: "center",
+              fontSize: 96,
+              fontWeight: 900,
+              color: "#FFFFFF",
               lineHeight: 1,
-              letterSpacing: "-0.02em",
+              letterSpacing: "-0.03em",
+              textShadow:
+                "0 4px 30px rgba(0,0,0,0.6), 0 2px 10px rgba(0,0,0,0.4)",
             }}
           >
-            {patrioticLetters("Side Quest", 82, textShadow)}
+            SIDE QUEST
           </div>
 
-          {/* Title — Philadelphia — per-letter R/W/B continued */}
+          {/* PHILADELPHIA — gold accent */}
           <div
             style={{
               display: "flex",
-              alignItems: "center",
+              fontSize: 52,
+              fontWeight: 800,
+              color: GOLD,
               lineHeight: 1,
-              letterSpacing: "-0.02em",
-              marginTop: 4,
+              letterSpacing: "0.12em",
+              textTransform: "uppercase",
+              marginTop: 8,
+              textShadow:
+                "0 4px 20px rgba(0,0,0,0.5), 0 2px 8px rgba(0,0,0,0.3)",
             }}
           >
-            {patrioticLetters("Philadelphia", 82, textShadow)}
+            Philadelphia
           </div>
 
-          {/* Philly icons row */}
+          {/* Divider line */}
+          <div
+            style={{
+              display: "flex",
+              width: 120,
+              height: 3,
+              background: `linear-gradient(to right, transparent, ${GOLD}, transparent)`,
+              marginTop: 24,
+              borderRadius: 2,
+            }}
+          />
+
+          {/* Tagline */}
           <div
             style={{
               display: "flex",
               alignItems: "center",
-              gap: 12,
-              marginTop: 22,
-            }}
-          >
-            <span style={{ fontSize: 26, display: "flex" }}>🔔</span>
-            <span style={{ fontSize: 26, display: "flex" }}>🏈</span>
-            <span style={{ fontSize: 26, display: "flex" }}>⚾</span>
-            <span style={{ fontSize: 26, display: "flex" }}>🏀</span>
-            <span style={{ fontSize: 26, display: "flex" }}>🏒</span>
-            <span style={{ fontSize: 26, display: "flex" }}>🥊</span>
-            <span style={{ fontSize: 26, display: "flex" }}>🧀</span>
-          </div>
-
-          {/* Stats row */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 14,
-              marginTop: 18,
-              fontSize: 18,
-              color: "rgba(255,255,255,0.75)",
-              fontWeight: 600,
-              textShadow: "0 2px 8px rgba(0,0,0,0.4)",
+              gap: 16,
+              marginTop: 20,
+              fontSize: 22,
+              fontWeight: 700,
+              color: "rgba(255,255,255,0.85)",
+              letterSpacing: "0.04em",
+              textShadow: "0 2px 12px rgba(0,0,0,0.5)",
             }}
           >
             <span style={{ display: "flex" }}>9 Neighborhoods</span>
-            <span style={{ color: TEXT_RED, display: "flex", fontSize: 14 }}>
-              ⭐
+            <span
+              style={{
+                display: "flex",
+                color: GOLD,
+                fontSize: 10,
+              }}
+            >
+              ◆
             </span>
-            <span style={{ display: "flex" }}>45 Objectives</span>
-            <span style={{ color: TEXT_RED, display: "flex", fontSize: 14 }}>
-              ⭐
+            <span style={{ display: "flex" }}>45 Quests</span>
+            <span
+              style={{
+                display: "flex",
+                color: GOLD,
+                fontSize: 10,
+              }}
+            >
+              ◆
             </span>
             <span style={{ display: "flex" }}>1 Epic Summer</span>
           </div>
-
-          {/* Events row */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 18,
-              marginTop: 10,
-              fontSize: 14,
-              color: "rgba(255,255,255,0.5)",
-              fontWeight: 600,
-              textShadow: "0 2px 8px rgba(0,0,0,0.4)",
-            }}
-          >
-            <span style={{ display: "flex" }}>⚽ FIFA World Cup</span>
-            <span style={{ color: "rgba(255,255,255,0.2)", display: "flex" }}>
-              |
-            </span>
-            <span style={{ display: "flex" }}>⚾ MLB All-Star Game</span>
-          </div>
         </div>
 
-        {/* Bottom patriotic bar with URL */}
-        <div
-          style={{
-            position: "absolute",
-            bottom: 28,
-            left: 0,
-            right: 0,
-            height: 30,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background:
-              "linear-gradient(to top, rgba(15,29,54,0.95), rgba(15,29,54,0.7))",
-          }}
-        >
-          <span
-            style={{
-              fontSize: 13,
-              fontWeight: 700,
-              color: "rgba(255,255,255,0.5)",
-              letterSpacing: "0.2em",
-              textTransform: "uppercase",
-              display: "flex",
-            }}
-          >
-            sidequestphilly.com
-          </span>
-        </div>
-
-        {/* Bottom border — red with white star emojis */}
+        {/* Bottom gold accent bar */}
         <div
           style={{
             position: "absolute",
             bottom: 0,
             left: 0,
             right: 0,
-            height: 28,
-            background: RED,
+            height: 5,
+            background: `linear-gradient(to right, #B22234, ${GOLD}, #3C3B6E)`,
             display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 28,
           }}
-        >
-          {Array.from({ length: 15 }).map((_, i) => (
-            <span
-              key={i}
-              style={{
-                fontSize: 14,
-                display: "flex",
-              }}
-            >
-              ⭐
-            </span>
-          ))}
-        </div>
+        />
       </div>
     ),
     { ...size },
