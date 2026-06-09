@@ -31,7 +31,7 @@ export const metadata: Metadata = {
   title: "Side Quest Philadelphia",
   description:
     "Explore Philadelphia like never before. Neighborhood scavenger hunts for World Cup and MLB All-Star Game summer 2026.",
-  metadataBase: new URL("https://sidequestphilly.com"),
+  metadataBase: new URL("https://side-quest-philly.vercel.app"),
   openGraph: {
     title: "Side Quest Philadelphia",
     description:
