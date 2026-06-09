@@ -91,7 +91,7 @@ export default function PassportPage() {
       <div className="mx-auto max-w-lg px-4 py-6 space-y-6">
         {isEmpty ? (
           /* Empty state */
-          <section className="bg-card border rounded-xl p-6 text-center">
+          <section className="bg-card border rounded-xl p-6 text-center animate-content-enter">
             <p className="text-4xl mb-3">🗺️</p>
             <h2 className="font-heading text-xl font-normal italic mb-1">
               Your adventure awaits
@@ -110,7 +110,7 @@ export default function PassportPage() {
         ) : (
           <>
             {/* XP + Level */}
-            <section className="bg-card border rounded-xl p-5">
+            <section className="bg-card border rounded-xl p-5 animate-content-enter">
               <LevelBadge xp={xp} size="lg" />
               <div className="grid grid-cols-3 gap-3 mt-4 pt-4 border-t text-center">
                 <div>
@@ -139,7 +139,7 @@ export default function PassportPage() {
             </section>
 
             {/* Stamp grid */}
-            <section>
+            <section className="animate-content-enter stagger-1">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="font-heading text-xl font-normal italic">
                   Stamps
@@ -163,7 +163,7 @@ export default function PassportPage() {
             </button>
 
             {/* Achievements */}
-            <section>
+            <section className="animate-content-enter stagger-3">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="font-heading text-xl font-normal italic">
                   Achievements

@@ -13,7 +13,7 @@ export default function Home() {
 
       <div className="mx-auto max-w-lg px-4 py-6 space-y-6">
         {/* How it works - bold numbered steps */}
-        <section className="bg-card border rounded-xl p-4">
+        <section className="bg-card border rounded-xl p-4 animate-content-enter">
           <h2 className="font-heading text-xl font-normal italic mb-3">
             How It Works
           </h2>
@@ -49,7 +49,7 @@ export default function Home() {
         </section>
 
         {/* Neighborhood quests */}
-        <section>
+        <section className="animate-content-enter stagger-1">
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-heading text-xl font-normal italic">
               Choose Your Quest
@@ -65,7 +65,7 @@ export default function Home() {
         <SecretQuestCTA />
 
         {/* Passport CTA */}
-        <section>
+        <section className="animate-content-enter stagger-3">
           <Link href="/passport" className="block group">
             <div className="relative rounded-xl overflow-hidden bg-[#0F1D36] p-4 text-white group-hover:shadow-lg transition-all">
               <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#C9A84C] via-[#B22234] to-[#C9A84C]" />
@@ -88,7 +88,7 @@ export default function Home() {
         </section>
 
         {/* Ultimate quest CTA */}
-        <section>
+        <section className="animate-content-enter stagger-4">
           <Link href="/ultimate" className="block group">
             <div className="relative rounded-xl overflow-hidden bg-[#0F1D36] p-4 text-white group-hover:shadow-lg transition-all">
               <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#B22234] via-[#C9A84C] to-[#3C3B6E]" />
