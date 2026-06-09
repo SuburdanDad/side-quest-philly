@@ -98,6 +98,22 @@
   html {
     @apply font-sans;
   }
+  /* Accessible focus ring — gold accent, visible on both light and dark backgrounds */
+  :focus-visible {
+    outline: 2px solid #C9A84C;
+    outline-offset: 2px;
+    border-radius: inherit;
+  }
+  /* Remove default outline since we're using the gold ring */
+  a:focus-visible,
+  button:focus-visible,
+  [role="button"]:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: 2px solid #C9A84C;
+    outline-offset: 2px;
+  }
 }
 
 @keyframes stamp {
