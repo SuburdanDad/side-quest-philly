@@ -2,11 +2,31 @@
 
 import { useEffect, useCallback, useState } from "react";
 import confetti from "canvas-confetti";
+import { Share2, Loader2 } from "lucide-react";
 import type { Neighborhood } from "@/lib/types";
 import { useGamification } from "@/lib/hooks/use-gamification";
 import { calculateXP } from "@/lib/gamification/xp";
 import { NEIGHBORHOODS } from "@/lib/data/neighborhoods";
 import { useQuestProgress } from "@/lib/hooks/use-quest-progress";
+import { usePhotoStorage } from "@/lib/hooks/use-photo-storage";
+
+function InstagramIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect width={20} height={20} x={2} y={2} rx={5} ry={5} />
+      <circle cx={12} cy={12} r={5} />
+      <circle cx={17.5} cy={6.5} r={1} fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
 
 type CompletionModalProps = {
   neighborhood: Neighborhood;
@@ -24,11 +44,23 @@ export function CompletionModal({
   >("overlay");
   const { progress } = useQuestProgress();
   const { gamification } = useGamification();
+  const { photos } = usePhotoStorage();
+  const [sharing, setSharing] = useState(false);
 
   const allObjectives = NEIGHBORHOODS.flatMap((n) =>
     n.objectives.map((o) => ({ id: o.id, category: o.category })),
   );
   const xp = calculateXP(progress.completedObjectives, allObjectives);
+
+  // Find a photo from this neighborhood's objectives to use in the share card
+  const neighborhoodPhoto = neighborhood.objectives
+    .map((o) => photos[o.id])
+    .find(Boolean);
+
+  // Count photos taken in this neighborhood
+  const photoCount = neighborhood.objectives.filter(
+    (o) => photos[o.id],
+  ).length;
 
   const fireConfetti = useCallback(() => {
     const colors = ["#0F1D36", "#C9A84C", "#B22234", "#3C3B6E"];
@@ -109,8 +141,59 @@ export function CompletionModal({
     };
   }, [open, fireConfetti]);
 
-  async function handleShare() {
-    const text = `I just completed the ${neighborhood.name} Side Quest in Philadelphia! ${neighborhood.emoji}\n\n${xp} XP earned · ${progress.completedNeighborhoods.length} stamps collected\n\nhttps://sidequestphilly.com\n#SideQuestPhilly`;
+  async function generateShareCard(): Promise<Blob | null> {
+    try {
+      const response = await fetch("/api/share-card", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          neighborhood: neighborhood.slug,
+          xp,
+          stamps: progress.completedNeighborhoods.length,
+          objectiveTitle: `${photoCount}/${neighborhood.objectives.length} objectives verified`,
+          photo: neighborhoodPhoto ?? undefined,
+        }),
+      });
+
+      if (!response.ok) return null;
+      return await response.blob();
+    } catch {
+      return null;
+    }
+  }
+
+  async function handleShareWithImage() {
+    setSharing(true);
+    try {
+      const blob = await generateShareCard();
+
+      if (blob && navigator.canShare) {
+        const file = new File([blob], "side-quest-philly.png", {
+          type: "image/png",
+        });
+        const shareData = {
+          files: [file],
+          title: `${neighborhood.name} Quest Complete!`,
+          text: `I just completed the ${neighborhood.name} Side Quest in Philadelphia! ${neighborhood.emoji}\n\n${xp} XP earned\n\n#SideQuestPhilly`,
+        };
+
+        if (navigator.canShare(shareData)) {
+          await navigator.share(shareData);
+          return;
+        }
+      }
+
+      // Fallback: text-only share
+      await handleShareText();
+    } catch {
+      // User cancelled share or share failed
+    } finally {
+      setSharing(false);
+    }
+  }
+
+  async function handleShareText() {
+    const text = `I just completed the ${neighborhood.name} Side Quest in Philadelphia! ${neighborhood.emoji}\n\n${xp} XP earned · ${progress.completedNeighborhoods.length} stamps collected\n\nhttps://side-quest-philly.vercel.app\n#SideQuestPhilly`;
     if (navigator.share) {
       try {
         await navigator.share({ text });
@@ -159,17 +242,36 @@ export function CompletionModal({
                 : "scale-100 opacity-100"
           }`}
         >
-          <div
-            className="w-28 h-28 rounded-full border-4 border-dashed flex items-center justify-center shadow-[0_0_40px_rgba(201,168,76,0.3)]"
-            style={{
-              borderColor: neighborhood.color,
-              backgroundColor: `${neighborhood.color}15`,
-            }}
-          >
-            <span className="text-5xl drop-shadow-lg">
-              {neighborhood.emoji}
-            </span>
-          </div>
+          {/* Show neighborhood photo collage or stamp */}
+          {neighborhoodPhoto ? (
+            <div className="relative">
+              <div
+                className="w-28 h-28 rounded-full overflow-hidden border-4 shadow-[0_0_40px_rgba(201,168,76,0.3)]"
+                style={{ borderColor: neighborhood.color }}
+              >
+                <img
+                  src={neighborhoodPhoto}
+                  alt="Quest photo"
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <div className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-[#C9A84C] flex items-center justify-center text-[#0F1D36] font-black text-sm shadow-lg">
+                {photoCount}
+              </div>
+            </div>
+          ) : (
+            <div
+              className="w-28 h-28 rounded-full border-4 border-dashed flex items-center justify-center shadow-[0_0_40px_rgba(201,168,76,0.3)]"
+              style={{
+                borderColor: neighborhood.color,
+                backgroundColor: `${neighborhood.color}15`,
+              }}
+            >
+              <span className="text-5xl drop-shadow-lg">
+                {neighborhood.emoji}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Neighborhood name */}
@@ -217,10 +319,10 @@ export function CompletionModal({
           <div className="w-px h-8 bg-white/10" />
           <div className="text-center">
             <p className="text-2xl font-black">
-              {gamification.achievements.length}
+              {photoCount}
             </p>
             <p className="text-[10px] font-bold uppercase tracking-wider text-white/40">
-              Achievements
+              Photos
             </p>
           </div>
         </div>
@@ -233,15 +335,35 @@ export function CompletionModal({
               : "opacity-0 translate-y-4 pointer-events-none"
           }`}
         >
+          {/* Primary: Share with branded image */}
           <button
             onClick={(e) => {
               e.stopPropagation();
-              handleShare();
+              handleShareWithImage();
             }}
-            className="w-full rounded-xl bg-white text-[#0F1D36] py-3 font-bold text-sm hover:bg-white/90 transition-colors"
+            disabled={sharing}
+            className="w-full rounded-xl bg-gradient-to-r from-[#833AB4] via-[#C13584] to-[#F77737] text-white py-3.5 font-bold text-sm hover:opacity-90 transition-opacity flex items-center justify-center gap-2 disabled:opacity-50"
           >
-            Share Your Achievement
+            {sharing ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <InstagramIcon className="h-4 w-4" />
+            )}
+            {sharing ? "Creating card..." : "Share to Stories"}
           </button>
+
+          {/* Secondary: Plain text share */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleShareText();
+            }}
+            className="w-full rounded-xl bg-white text-[#0F1D36] py-3 font-bold text-sm hover:bg-white/90 transition-colors flex items-center justify-center gap-2"
+          >
+            <Share2 className="h-4 w-4" />
+            Share Achievement
+          </button>
+
           <button
             onClick={(e) => {
               e.stopPropagation();

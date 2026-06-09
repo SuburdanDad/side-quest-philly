@@ -118,6 +118,7 @@ export function QuestPageClient({ neighborhood }: QuestPageClientProps) {
               key={objective.id}
               objective={objective}
               index={index}
+              neighborhoodSlug={neighborhood.slug}
               onComplete={handleObjectiveComplete}
             />
           ))}
