@@ -42,10 +42,10 @@
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  --radius-xl: var(--radius);
+  --radius-2xl: calc(var(--radius) * 1.4);
+  --radius-3xl: calc(var(--radius) * 1.8);
+  --radius-4xl: calc(var(--radius) * 2.2);
 
   --color-cat-culture: oklch(0.541 0.281 293);
   --color-cat-history: oklch(0.553 0.163 58);
@@ -54,7 +54,7 @@
 }
 
 :root {
-  --background: oklch(0.985 0.002 90);
+  --background: oklch(0.970 0.007 89);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
@@ -62,15 +62,15 @@
   --popover-foreground: oklch(0.145 0 0);
   --primary: oklch(0.35 0.08 175);
   --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.96 0.005 90);
+  --secondary: oklch(0.96 0.006 89);
   --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.96 0.005 90);
+  --muted: oklch(0.96 0.006 89);
   --muted-foreground: oklch(0.5 0 0);
   --accent: oklch(0.577 0.245 27);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.91 0.005 90);
-  --input: oklch(0.91 0.005 90);
+  --border: oklch(0.913 0.009 85);
+  --input: oklch(0.913 0.009 85);
   --ring: oklch(0.35 0.08 175);
   --chart-1: oklch(0.35 0.08 175);
   --chart-2: oklch(0.577 0.245 27);
