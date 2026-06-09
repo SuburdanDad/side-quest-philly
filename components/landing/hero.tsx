@@ -41,18 +41,18 @@ export function Hero() {
         {user ? (
           <button
             onClick={() => signOut()}
-            className="inline-flex items-center gap-1.5 text-[11px] text-white/60 hover:text-white transition-colors px-2 py-1"
+            className="inline-flex items-center gap-1.5 text-[11px] text-white/60 hover:text-white transition-colors px-3 py-2.5 min-h-[44px]"
           >
-            <User className="h-3 w-3" />
+            <User className="h-3.5 w-3.5" />
             {user.email?.split("@")[0]}
-            <LogOut className="h-2.5 w-2.5" />
+            <LogOut className="h-3 w-3" />
           </button>
         ) : (
           <Link
             href="/login"
-            className="inline-flex items-center gap-1.5 text-[11px] text-white/60 hover:text-white transition-colors px-2 py-1"
+            className="inline-flex items-center gap-1.5 text-[11px] text-white/60 hover:text-white transition-colors px-3 py-2.5 min-h-[44px]"
           >
-            <User className="h-3 w-3" />
+            <User className="h-3.5 w-3.5" />
             Sign in
           </Link>
         )}
@@ -70,11 +70,11 @@ export function Hero() {
         </div>
 
         {/* Main title */}
-        <h1 className="text-[48px] sm:text-7xl font-black tracking-tight leading-[0.9] mb-1 drop-shadow-[0_2px_10px_rgba(0,0,0,0.5)]">
-          SIDE QUEST
+        <h1 className="font-heading text-[48px] sm:text-7xl font-normal italic tracking-tight leading-[0.9] mb-1 drop-shadow-[0_2px_10px_rgba(0,0,0,0.5)]">
+          Side Quest
         </h1>
-        <p className="text-[42px] sm:text-6xl font-black tracking-tight leading-[0.9] text-[#C9A84C] drop-shadow-[0_2px_10px_rgba(0,0,0,0.5)] mb-4">
-          PHILLY
+        <p className="font-heading text-[42px] sm:text-6xl font-normal italic tracking-tight leading-[0.9] text-[#C9A84C] drop-shadow-[0_2px_10px_rgba(0,0,0,0.5)] mb-4">
+          Philadelphia
         </p>
 
         <p className="text-sm text-white/80 max-w-[300px] mx-auto mb-5 leading-relaxed drop-shadow-[0_1px_3px_rgba(0,0,0,0.5)]">
@@ -92,7 +92,7 @@ export function Hero() {
             <p className="text-[10px] font-bold uppercase tracking-wide">
               World Cup
             </p>
-            <p className="text-[9px] text-white/50 mt-0.5">Jun 11 - Jul 19</p>
+            <p className="text-[10px] text-white/50 mt-0.5">Jun 11 - Jul 19</p>
           </div>
           <div className="flex-1 bg-[#C9A84C]/25 backdrop-blur-md border border-[#C9A84C]/40 rounded-xl p-2.5 text-center">
             <span className="text-2xl block mb-0.5">🔔</span>
@@ -102,7 +102,7 @@ export function Hero() {
             <p className="text-[10px] font-bold uppercase tracking-wide text-[#C9A84C]">
               250
             </p>
-            <p className="text-[9px] text-[#C9A84C]/60 mt-0.5">All Summer</p>
+            <p className="text-[10px] text-[#C9A84C]/60 mt-0.5">All Summer</p>
           </div>
           <div className="flex-1 bg-black/30 backdrop-blur-md border border-white/15 rounded-xl p-2.5 text-center">
             <span className="text-2xl block mb-0.5">⚾</span>
@@ -112,7 +112,7 @@ export function Hero() {
             <p className="text-[10px] font-bold uppercase tracking-wide">
               All-Star
             </p>
-            <p className="text-[9px] text-white/50 mt-0.5">Jul 13 - 15</p>
+            <p className="text-[10px] text-white/50 mt-0.5">Jul 13 - 15</p>
           </div>
         </div>
 

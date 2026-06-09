@@ -81,6 +81,7 @@ export function useQuestProgress() {
     syncedRef.current = true;
 
     const supabase = createClient();
+    if (!supabase) return;
 
     supabase
       .from("user_progress")
@@ -137,21 +138,23 @@ export function useQuestProgress() {
 
       if (user) {
         const supabase = createClient();
-        if (completed.includes(id)) {
-          supabase
-            .from("user_progress")
-            .upsert(
-              { user_id: user.id, objective_id: id },
-              { onConflict: "user_id,objective_id" },
-            )
-            .then(() => {});
-        } else {
-          supabase
-            .from("user_progress")
-            .delete()
-            .eq("user_id", user.id)
-            .eq("objective_id", id)
-            .then(() => {});
+        if (supabase) {
+          if (completed.includes(id)) {
+            supabase
+              .from("user_progress")
+              .upsert(
+                { user_id: user.id, objective_id: id },
+                { onConflict: "user_id,objective_id" },
+              )
+              .then(() => {});
+          } else {
+            supabase
+              .from("user_progress")
+              .delete()
+              .eq("user_id", user.id)
+              .eq("objective_id", id)
+              .then(() => {});
+          }
         }
       }
     },
@@ -187,11 +190,13 @@ export function useQuestProgress() {
     setStoredProgress({ ...DEFAULT_PROGRESS });
     if (user) {
       const supabase = createClient();
-      supabase
-        .from("user_progress")
-        .delete()
-        .eq("user_id", user.id)
-        .then(() => {});
+      if (supabase) {
+        supabase
+          .from("user_progress")
+          .delete()
+          .eq("user_id", user.id)
+          .then(() => {});
+      }
     }
   }, [user]);
 

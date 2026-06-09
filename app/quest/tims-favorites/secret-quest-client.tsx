@@ -52,7 +52,7 @@ export function SecretQuestClient({ quest }: SecretQuestClientProps) {
             >
               <ArrowLeft className="h-4 w-4" /> Back
             </Link>
-            <h1 className="text-2xl font-black uppercase tracking-wide">
+            <h1 className="font-heading text-3xl font-normal italic tracking-tight">
               {quest.emoji} {quest.name}
             </h1>
           </div>
@@ -63,11 +63,11 @@ export function SecretQuestClient({ quest }: SecretQuestClientProps) {
             <div className="w-20 h-20 rounded-full bg-muted/50 flex items-center justify-center mx-auto">
               <Lock className="h-8 w-8 text-muted-foreground" />
             </div>
-            <h2 className="text-xl font-black uppercase tracking-wide">
+            <h2 className="font-heading text-xl font-normal italic">
               Quest Locked
             </h2>
             <p className="text-sm text-muted-foreground max-w-xs mx-auto">
-              Complete {quest.unlockRequirement} neighborhood quests to unlock
+              Complete {quest.unlockRequirement}{" "}neighborhood quests to unlock
               Tim&apos;s personal favorite spots in Philadelphia. You&apos;ve
               completed{" "}
               <span className="font-bold text-foreground">
@@ -145,7 +145,7 @@ export function SecretQuestClient({ quest }: SecretQuestClientProps) {
               </div>
               <div className="flex items-center gap-2.5 mb-1.5">
                 <span className="text-4xl drop-shadow-lg">{quest.emoji}</span>
-                <h1 className="text-3xl font-black tracking-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.4)]">
+                <h1 className="font-heading text-3xl font-normal italic tracking-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.4)]">
                   {quest.name}
                 </h1>
               </div>
