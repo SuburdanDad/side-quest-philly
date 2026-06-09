@@ -8,14 +8,9 @@ export const alt =
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-// Parchment / quest palette
-const PARCHMENT = "#F5E6C8";
-const PARCHMENT_DARK = "#E8D5A8";
-const BROWN = "#6B4226";
-const DARK_BROWN = "#3D2415";
-const GOLD = "#C9A84C";
 const NAVY = "#0F1D36";
-const RED = "#B22234";
+const GOLD = "#C9A84C";
+const AMBER = "#D97706";
 
 export default async function Image() {
   const skylineBuffer = await readFile(
@@ -33,10 +28,25 @@ export default async function Image() {
           position: "relative",
           overflow: "hidden",
           fontFamily: "Georgia, serif",
-          background: PARCHMENT,
+          background: NAVY,
         }}
       >
-        {/* Parchment texture — radial grain effect */}
+        {/* Skyline photo — full bleed */}
+        <img
+          src={skylineBase64}
+          width={1200}
+          height={630}
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            width: 1200,
+            height: 630,
+            objectFit: "cover",
+          }}
+        />
+
+        {/* Warm sunset gradient — amber to navy */}
         <div
           style={{
             position: "absolute",
@@ -44,249 +54,127 @@ export default async function Image() {
             left: 0,
             right: 0,
             bottom: 0,
-            background: `radial-gradient(ellipse at 30% 20%, ${PARCHMENT} 0%, ${PARCHMENT_DARK} 70%, #D4C090 100%)`,
+            background:
+              "linear-gradient(to bottom, rgba(217,119,6,0.35) 0%, rgba(201,168,76,0.2) 30%, rgba(15,29,54,0.7) 60%, rgba(15,29,54,0.92) 100%)",
             display: "flex",
           }}
         />
 
-        {/* Skyline photo strip across the bottom third */}
+        {/* Top accent line — warm gold */}
         <div
           style={{
             position: "absolute",
-            bottom: 70,
-            left: 40,
-            right: 40,
-            height: 180,
-            borderRadius: 16,
-            overflow: "hidden",
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 4,
+            background: `linear-gradient(to right, ${AMBER}, ${GOLD}, ${AMBER})`,
             display: "flex",
-            border: `3px solid ${BROWN}`,
-            boxShadow: "0 4px 20px rgba(59,36,21,0.3)",
-          }}
-        >
-          <img
-            src={skylineBase64}
-            width={1120}
-            height={180}
-            style={{
-              width: 1120,
-              height: 180,
-              objectFit: "cover",
-              objectPosition: "center 40%",
-            }}
-          />
-          {/* Warm overlay on photo */}
-          <div
-            style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              background:
-                "linear-gradient(to bottom, rgba(245,230,200,0.15) 0%, rgba(15,29,54,0.4) 100%)",
-              display: "flex",
-            }}
-          />
-        </div>
-
-        {/* Quest stamp border — top */}
-        <div
-          style={{
-            position: "absolute",
-            top: 14,
-            left: 14,
-            right: 14,
-            bottom: 14,
-            border: `3px dashed ${BROWN}`,
-            borderRadius: 20,
-            display: "flex",
-            opacity: 0.4,
           }}
         />
 
-        {/* Content area */}
+        {/* Content */}
         <div
           style={{
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
+            justifyContent: "center",
             width: "100%",
+            height: "100%",
             position: "relative",
-            paddingTop: 40,
           }}
         >
-          {/* Compass + quest icons row */}
+          {/* Top badge */}
           <div
             style={{
               display: "flex",
               alignItems: "center",
-              gap: 16,
-              fontSize: 32,
+              gap: 8,
+              padding: "6px 20px",
+              background: "rgba(255,255,255,0.12)",
+              borderRadius: 999,
+              border: "1px solid rgba(255,255,255,0.15)",
+              marginBottom: 16,
             }}
           >
-            <span style={{ display: "flex" }}>🧭</span>
-            <span style={{ display: "flex" }}>🗺️</span>
-            <span style={{ display: "flex" }}>🔔</span>
-            <span style={{ display: "flex" }}>🗽</span>
-            <span style={{ display: "flex" }}>📍</span>
+            <span
+              style={{
+                fontSize: 12,
+                color: GOLD,
+                letterSpacing: "0.15em",
+                textTransform: "uppercase",
+                fontWeight: 700,
+                display: "flex",
+              }}
+            >
+              Summer 2026 Scavenger Hunt
+            </span>
           </div>
 
-          {/* SIDE QUEST title — hand-drawn feel */}
+          {/* Main title */}
           <div
             style={{
               display: "flex",
-              fontSize: 88,
+              fontSize: 100,
               fontWeight: 900,
-              color: DARK_BROWN,
+              color: "white",
               lineHeight: 1,
               letterSpacing: "-0.02em",
-              marginTop: 12,
-              textShadow: `2px 2px 0 ${PARCHMENT_DARK}`,
+              textShadow: "0 4px 24px rgba(0,0,0,0.4)",
             }}
           >
             SIDE QUEST
           </div>
 
-          {/* Decorative divider */}
+          {/* Divider line */}
           <div
             style={{
               display: "flex",
-              alignItems: "center",
-              gap: 12,
-              marginTop: 4,
+              width: 120,
+              height: 3,
+              background: GOLD,
+              marginTop: 12,
+              marginBottom: 12,
+              borderRadius: 2,
             }}
-          >
-            <div
-              style={{
-                display: "flex",
-                width: 80,
-                height: 2,
-                background: BROWN,
-                opacity: 0.5,
-              }}
-            />
-            <span style={{ fontSize: 18, display: "flex", color: GOLD }}>
-              ⭐
-            </span>
-            <div
-              style={{
-                display: "flex",
-                width: 80,
-                height: 2,
-                background: BROWN,
-                opacity: 0.5,
-              }}
-            />
-          </div>
+          />
 
-          {/* PHILADELPHIA subtitle */}
+          {/* City name */}
           <div
             style={{
               display: "flex",
-              fontSize: 36,
-              fontWeight: 700,
-              color: BROWN,
+              fontSize: 34,
+              color: "white",
               letterSpacing: "0.2em",
               textTransform: "uppercase",
-              marginTop: 4,
+              fontWeight: 400,
+              textShadow: "0 2px 12px rgba(0,0,0,0.3)",
             }}
           >
             Philadelphia
           </div>
 
-          {/* Quest stats — styled like a treasure map legend */}
+          {/* Stats row */}
           <div
             style={{
               display: "flex",
-              alignItems: "center",
-              gap: 24,
-              marginTop: 16,
-              padding: "10px 30px",
-              background: "rgba(107,66,38,0.08)",
-              borderRadius: 12,
-              border: `1.5px solid rgba(107,66,38,0.15)`,
+              gap: 28,
+              marginTop: 24,
+              fontSize: 15,
+              color: "rgba(255,255,255,0.7)",
+              letterSpacing: "0.04em",
             }}
           >
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-              }}
-            >
-              <span style={{ fontSize: 20, display: "flex" }}>📍</span>
-              <span
-                style={{
-                  fontSize: 18,
-                  fontWeight: 700,
-                  color: DARK_BROWN,
-                  display: "flex",
-                }}
-              >
-                9 Neighborhoods
-              </span>
-            </div>
-            <div
-              style={{
-                display: "flex",
-                width: 4,
-                height: 4,
-                borderRadius: 2,
-                background: GOLD,
-              }}
-            />
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-              }}
-            >
-              <span style={{ fontSize: 20, display: "flex" }}>🏆</span>
-              <span
-                style={{
-                  fontSize: 18,
-                  fontWeight: 700,
-                  color: DARK_BROWN,
-                  display: "flex",
-                }}
-              >
-                45 Quests
-              </span>
-            </div>
-            <div
-              style={{
-                display: "flex",
-                width: 4,
-                height: 4,
-                borderRadius: 2,
-                background: GOLD,
-              }}
-            />
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-              }}
-            >
-              <span style={{ fontSize: 20, display: "flex" }}>🇺🇸</span>
-              <span
-                style={{
-                  fontSize: 18,
-                  fontWeight: 700,
-                  color: DARK_BROWN,
-                  display: "flex",
-                }}
-              >
-                Summer 2026
-              </span>
-            </div>
+            <span style={{ display: "flex" }}>9 Neighborhoods</span>
+            <span style={{ display: "flex", color: GOLD }}>·</span>
+            <span style={{ display: "flex" }}>45 Quests</span>
+            <span style={{ display: "flex", color: GOLD }}>·</span>
+            <span style={{ display: "flex" }}>1 Epic Summer</span>
           </div>
         </div>
 
-        {/* Bottom banner on photo */}
+        {/* Bottom events bar */}
         <div
           style={{
             position: "absolute",
@@ -300,47 +188,17 @@ export default async function Image() {
           <div
             style={{
               display: "flex",
-              alignItems: "center",
-              gap: 10,
-              padding: "6px 24px",
-              background: NAVY,
-              borderRadius: 999,
-              border: `2px solid ${GOLD}`,
+              gap: 24,
+              fontSize: 12,
+              color: "rgba(255,255,255,0.45)",
+              letterSpacing: "0.08em",
             }}
           >
-            <span style={{ fontSize: 14, display: "flex" }}>⚽</span>
-            <span
-              style={{
-                fontSize: 13,
-                fontWeight: 700,
-                color: "rgba(255,255,255,0.8)",
-                letterSpacing: "0.1em",
-                display: "flex",
-              }}
-            >
-              FIFA World Cup
-            </span>
-            <span
-              style={{
-                fontSize: 12,
-                color: GOLD,
-                display: "flex",
-              }}
-            >
+            <span style={{ display: "flex" }}>⚽ FIFA World Cup</span>
+            <span style={{ display: "flex", color: GOLD, opacity: 0.5 }}>
               ✦
             </span>
-            <span style={{ fontSize: 14, display: "flex" }}>⚾</span>
-            <span
-              style={{
-                fontSize: 13,
-                fontWeight: 700,
-                color: "rgba(255,255,255,0.8)",
-                letterSpacing: "0.1em",
-                display: "flex",
-              }}
-            >
-              MLB All-Star
-            </span>
+            <span style={{ display: "flex" }}>⚾ MLB All-Star</span>
           </div>
         </div>
       </div>
