@@ -76,7 +76,7 @@ export default function PassportPage() {
 
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-black uppercase tracking-wide">
+              <h1 className="font-heading text-3xl font-normal italic tracking-tight">
                 Your Passport
               </h1>
               <p className="text-[11px] text-white/50 mt-0.5 font-bold uppercase tracking-wider">
@@ -93,7 +93,7 @@ export default function PassportPage() {
           /* Empty state */
           <section className="bg-card border rounded-xl p-6 text-center">
             <p className="text-4xl mb-3">🗺️</p>
-            <h2 className="font-black text-lg uppercase tracking-wide mb-1">
+            <h2 className="font-heading text-xl font-normal italic mb-1">
               Your adventure awaits
             </h2>
             <p className="text-sm text-muted-foreground mb-4">
@@ -141,7 +141,7 @@ export default function PassportPage() {
             {/* Stamp grid */}
             <section>
               <div className="flex items-center justify-between mb-3">
-                <h2 className="text-sm font-black uppercase tracking-wide">
+                <h2 className="font-heading text-xl font-normal italic">
                   Stamps
                 </h2>
                 <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">
@@ -165,7 +165,7 @@ export default function PassportPage() {
             {/* Achievements */}
             <section>
               <div className="flex items-center justify-between mb-3">
-                <h2 className="text-sm font-black uppercase tracking-wide">
+                <h2 className="font-heading text-xl font-normal italic">
                   Achievements
                 </h2>
                 <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">
