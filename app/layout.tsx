@@ -42,6 +42,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
+    site: "@SideQuestPhilly",
+    creator: "@SideQuestPhilly",
     title: "Side Quest Philadelphia",
     description:
       "Neighborhood scavenger hunts across Philly — summer 2026.",

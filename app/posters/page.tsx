@@ -94,7 +94,7 @@ export default async function PostersPage() {
             </p>
 
             <p className="mt-8 text-[11px] font-bold uppercase tracking-widest text-[#6B6B6B]">
-              #SideQuestPhilly · side-quest-philly.vercel.app
+              @SideQuestPhilly · #SideQuestPhilly · side-quest-philly.vercel.app
             </p>
           </section>
         ))}

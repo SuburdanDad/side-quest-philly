@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { createClient } from "@/lib/supabase/client";
+import { SiteFooter } from "@/components/site-footer";
 import { getLevel } from "@/lib/gamification/xp";
 
 type LeaderboardRow = {
@@ -316,12 +317,7 @@ export default function LeaderboardPage() {
           </>
         )}
 
-        <footer className="text-center text-[10px] text-muted-foreground py-6 border-t space-y-0.5">
-          <p className="font-bold uppercase tracking-widest">
-            Side Quest Philadelphia
-          </p>
-          <p>Summer 2026 ... Celebrating 250 years of America</p>
-        </footer>
+        <SiteFooter />
       </div>
     </main>
   );
