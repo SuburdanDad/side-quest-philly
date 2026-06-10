@@ -91,3 +91,6 @@
 | 2026-06-05 | Deep navy hero over white | Risk: less approachable at first glance. Reward: immediate "this is different" differentiation. |
 | 2026-06-05 | Parchment surface (#F7F5F0) | Warm white instead of cool white. Subtle historical weight without being heavy. |
 | 2026-06-05 | Category color ordering | History → Culture → Entertainment → Food & Drink. Each quest ends at a restaurant/bar. |
+| 2026-06-09 | AI verification is a carrot, never a stick | Photos always count; AI verification adds +5 XP, a gold BadgeCheck, and leaderboard credibility. Rejection shows a kind one-liner + "Try another photo" — gameplay never blocks on the judge. |
+| 2026-06-09 | Leaderboard ("City Legends") typography | Geist Mono (`font-mono tabular-nums`) for ranks and XP per the Data/Tables rule — first surface to use it. Navy header matches passport; gold ring highlights the viewer's row. |
+| 2026-06-09 | Instagram-gradient share button | The "Share to Stories" button in the completion modal uses Instagram's brand gradient — a deliberate exception to the restrained palette, since it signals the destination, not our brand. |

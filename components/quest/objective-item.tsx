@@ -1,14 +1,26 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { ChevronDown, Lightbulb, Camera, ImageIcon, Share2, Loader2 } from "lucide-react";
+import {
+  ChevronDown,
+  Lightbulb,
+  Camera,
+  ImageIcon,
+  Share2,
+  Loader2,
+  BadgeCheck,
+  RotateCcw,
+} from "lucide-react";
 import type { Objective } from "@/lib/types";
 import { useQuestProgress } from "@/lib/hooks/use-quest-progress";
 import { useGamification } from "@/lib/hooks/use-gamification";
 import { usePhotoStorage } from "@/lib/hooks/use-photo-storage";
+import { useAuth } from "@/components/auth/auth-provider";
+import { createClient } from "@/lib/supabase/client";
+import { requestPhotoVerification } from "@/lib/photos/verify-client";
+import { syncPhotoToCloud, removeCloudPhoto } from "@/lib/photos/sync";
 import { NEIGHBORHOODS } from "@/lib/data/neighborhoods";
-import { CATEGORY_XP } from "@/lib/gamification/xp";
-import { calculateXP } from "@/lib/gamification/xp";
+import { CATEGORY_XP, VERIFIED_PHOTO_XP } from "@/lib/gamification/xp";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CategoryBadge } from "./category-badge";
 import { PhotoCapture } from "./photo-capture";
@@ -27,105 +39,41 @@ export function ObjectiveItem({
   onComplete,
 }: ObjectiveItemProps) {
   const { isCompleted, toggleObjective, progress } = useQuestProgress();
-  const { recordObjectiveCompletion, removeObjectiveCompletion } =
+  const { recordObjectiveCompletion, removeObjectiveCompletion, recordVerification } =
     useGamification();
-  const { savePhoto, getPhoto, removePhoto } = usePhotoStorage();
+  const { savePhoto, setVerification, getPhoto, removePhoto, verifiedCount } =
+    usePhotoStorage();
+  const { user } = useAuth();
   const [expanded, setExpanded] = useState(false);
   const [showHint, setShowHint] = useState(false);
   const [xpFlash, setXpFlash] = useState(false);
+  const [bonusFlash, setBonusFlash] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
   const [addingPhotoOnly, setAddingPhotoOnly] = useState(false);
   const [showPhotoFull, setShowPhotoFull] = useState(false);
+  const [verifying, setVerifying] = useState(false);
   const [sharing, setSharing] = useState(false);
   const completed = isCompleted(objective.id);
   const photo = getPhoto(objective.id);
 
-  function handleToggle() {
-    if (!completed) {
-      // Opening camera — don't toggle yet
-      setAddingPhotoOnly(false);
-      setShowCamera(true);
-      return;
-    }
-
-    // Uncompleting — toggle immediately
-    toggleObjective(objective.id);
-    removeObjectiveCompletion(objective.id);
-    removePhoto(objective.id);
-  }
-
-  function handleAddPhotoToCompleted() {
-    setAddingPhotoOnly(true);
-    setShowCamera(true);
-  }
-
-  const handlePhotoCaptured = useCallback(
-    async (file: File) => {
-      setShowCamera(false);
-
-      // Save photo
-      await savePhoto(objective.id, file);
-
-      // If we're just adding a photo to an already-completed objective, stop here
-      if (addingPhotoOnly) {
-        setAddingPhotoOnly(false);
-        return;
-      }
-
-      // Mark as complete
-      toggleObjective(objective.id);
-
-      // Compute the "future" progress state after this toggle
-      const newCompleted = [...progress.completedObjectives, objective.id];
-      const newCompletedNeighborhoods = NEIGHBORHOODS.filter((n) =>
-        n.objectives.every((o) => newCompleted.includes(o.id)),
-      ).map((n) => n.id);
-
-      recordObjectiveCompletion(objective.id, {
-        ...progress,
-        completedObjectives: newCompleted,
-        completedNeighborhoods: newCompletedNeighborhoods,
-      });
-
-      // XP flash
-      setXpFlash(true);
-      setTimeout(() => setXpFlash(false), 1500);
-
-      if (onComplete) onComplete();
-    },
-    [
-      objective.id,
-      addingPhotoOnly,
-      savePhoto,
-      toggleObjective,
-      progress,
-      recordObjectiveCompletion,
-      onComplete,
-    ],
-  );
-
-  const handleSkipPhoto = useCallback(() => {
-    setShowCamera(false);
-
-    // If just adding photo to completed objective, do nothing on skip
-    if (addingPhotoOnly) {
-      setAddingPhotoOnly(false);
-      return;
-    }
-
-    // Complete without photo
+  const completeObjective = useCallback(() => {
     toggleObjective(objective.id);
 
+    // Compute the "future" progress state after this toggle
     const newCompleted = [...progress.completedObjectives, objective.id];
     const newCompletedNeighborhoods = NEIGHBORHOODS.filter((n) =>
       n.objectives.every((o) => newCompleted.includes(o.id)),
     ).map((n) => n.id);
 
-    recordObjectiveCompletion(objective.id, {
-      ...progress,
-      completedObjectives: newCompleted,
-      completedNeighborhoods: newCompletedNeighborhoods,
-    });
+    recordObjectiveCompletion(
+      objective.id,
+      {
+        ...progress,
+        completedObjectives: newCompleted,
+        completedNeighborhoods: newCompletedNeighborhoods,
+      },
+      verifiedCount,
+    );
 
     setXpFlash(true);
     setTimeout(() => setXpFlash(false), 1500);
@@ -133,32 +81,128 @@ export function ObjectiveItem({
     if (onComplete) onComplete();
   }, [
     objective.id,
-    addingPhotoOnly,
     toggleObjective,
     progress,
     recordObjectiveCompletion,
+    verifiedCount,
     onComplete,
   ]);
+
+  const runVerification = useCallback(
+    async (dataUrl: string) => {
+      setVerifying(true);
+      try {
+        const result = await requestPhotoVerification(objective.id, dataUrl);
+
+        if (typeof result.verified === "boolean") {
+          setVerification(objective.id, result.verified, result.reason);
+
+          if (result.verified) {
+            // Verified! Bonus XP flash + maybe a photo achievement.
+            setBonusFlash(true);
+            setTimeout(() => setBonusFlash(false), 2200);
+            recordVerification(progress, verifiedCount + 1);
+          }
+
+          // Push photo + verdict to the cloud for the leaderboard
+          if (user) {
+            const supabase = createClient();
+            if (supabase) {
+              syncPhotoToCloud(supabase, user.id, objective.id, {
+                dataUrl,
+                verified: result.verified,
+                reason: result.reason,
+                savedAt: new Date().toISOString(),
+              });
+            }
+          }
+        } else if (user) {
+          // Verification unavailable — still store the photo itself
+          const supabase = createClient();
+          if (supabase) {
+            syncPhotoToCloud(supabase, user.id, objective.id, {
+              dataUrl,
+              verified: null,
+              reason: null,
+              savedAt: new Date().toISOString(),
+            });
+          }
+        }
+      } finally {
+        setVerifying(false);
+      }
+    },
+    [
+      objective.id,
+      setVerification,
+      recordVerification,
+      progress,
+      verifiedCount,
+      user,
+    ],
+  );
+
+  function handleToggle() {
+    if (!completed) {
+      setAddingPhotoOnly(false);
+      setShowCamera(true);
+      return;
+    }
+
+    // Un-completing: clear local + cloud photo state
+    toggleObjective(objective.id);
+    removeObjectiveCompletion(objective.id);
+    removePhoto(objective.id);
+    if (user) {
+      const supabase = createClient();
+      if (supabase) removeCloudPhoto(supabase, user.id, objective.id);
+    }
+  }
+
+  const handlePhotoCaptured = useCallback(
+    async (file: File) => {
+      setShowCamera(false);
+      const entry = await savePhoto(objective.id, file);
+
+      if (!addingPhotoOnly) {
+        completeObjective();
+      } else {
+        setAddingPhotoOnly(false);
+      }
+
+      // Judge in the background — gameplay never waits on the AI.
+      runVerification(entry.dataUrl);
+    },
+    [objective.id, addingPhotoOnly, savePhoto, completeObjective, runVerification],
+  );
+
+  const handleSkipPhoto = useCallback(() => {
+    setShowCamera(false);
+    if (addingPhotoOnly) {
+      setAddingPhotoOnly(false);
+      return;
+    }
+    completeObjective();
+  }, [addingPhotoOnly, completeObjective]);
+
+  function handleRetakePhoto() {
+    setAddingPhotoOnly(true);
+    setShowCamera(true);
+  }
 
   async function handleShareObjective() {
     if (!photo || !neighborhoodSlug) return;
     setSharing(true);
 
     try {
-      const allObjectives = NEIGHBORHOODS.flatMap((n) =>
-        n.objectives.map((o) => ({ id: o.id, category: o.category })),
-      );
-      const xp = calculateXP(progress.completedObjectives, allObjectives);
-
       const response = await fetch("/api/share-card", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           neighborhood: neighborhoodSlug,
-          xp,
-          stamps: progress.completedNeighborhoods.length,
           objectiveTitle: objective.title,
-          photo,
+          verified: photo.verified === true,
+          photo: photo.dataUrl,
         }),
       });
 
@@ -181,8 +225,7 @@ export function ObjectiveItem({
         }
       }
 
-      // Fallback: text share
-      const text = `I just completed "${objective.title}" in the Side Quest Philadelphia scavenger hunt!\n\n#SideQuestPhilly`;
+      const text = `I just completed "${objective.title}" in the Side Quest Philadelphia scavenger hunt!\n\nhttps://side-quest-philly.vercel.app\n#SideQuestPhilly`;
       if (navigator.share) {
         await navigator.share({ text });
       } else {
@@ -212,7 +255,7 @@ export function ObjectiveItem({
             <div className="flex items-center gap-2 flex-wrap mb-1">
               <CategoryBadge category={objective.category} />
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h3
                 className={`font-semibold text-sm sm:text-base transition-all ${completed ? "line-through text-muted-foreground" : ""}`}
               >
@@ -223,71 +266,118 @@ export function ObjectiveItem({
                   +{CATEGORY_XP[objective.category]} XP
                 </span>
               )}
+              {bonusFlash && (
+                <span className="text-[10px] font-black text-emerald-600 animate-bounce">
+                  +{VERIFIED_PHOTO_XP} XP Verified!
+                </span>
+              )}
             </div>
             <p className="text-sm text-muted-foreground mt-1">
               {objective.description}
             </p>
 
-            {/* Photo proof thumbnail */}
+            {/* Photo proof */}
             {completed && photo && (
               <div className="mt-3">
-                <button
-                  onClick={() => setShowPhotoFull(!showPhotoFull)}
-                  className="group"
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="relative w-16 h-16 rounded-lg overflow-hidden border-2 border-[#C9A84C]/30 shadow-sm">
+                <div className="flex items-center gap-2.5">
+                  <button
+                    onClick={() => setShowPhotoFull(!showPhotoFull)}
+                    className="group flex-shrink-0"
+                    aria-label="Toggle photo preview"
+                  >
+                    <div
+                      className={`relative w-16 h-16 rounded-lg overflow-hidden border-2 shadow-sm ${
+                        photo.verified
+                          ? "border-[#C9A84C]"
+                          : "border-[#C9A84C]/30"
+                      }`}
+                    >
                       <img
-                        src={photo}
+                        src={photo.dataUrl}
                         alt="Your photo proof"
                         className="w-full h-full object-cover"
                       />
                       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+                      {photo.verified && (
+                        <div className="absolute bottom-0.5 right-0.5 w-4 h-4 rounded-full bg-[#C9A84C] flex items-center justify-center">
+                          <BadgeCheck className="h-3 w-3 text-[#0F1D36]" />
+                        </div>
+                      )}
                     </div>
-                    <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-[#C9A84C]">
-                      <Camera className="h-3 w-3" />
-                      Verified
+                  </button>
+
+                  <div className="min-w-0">
+                    {verifying ? (
+                      <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-amber-600">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        Judging your photo...
+                      </div>
+                    ) : photo.verified === true ? (
+                      <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-[#C9A84C]">
+                        <BadgeCheck className="h-3.5 w-3.5" />
+                        AI Verified · +{VERIFIED_PHOTO_XP} XP
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        <Camera className="h-3 w-3" />
+                        Photo saved
+                      </div>
+                    )}
+
+                    {!verifying && photo.reason && (
+                      <p className="text-xs text-muted-foreground italic mt-0.5 leading-snug">
+                        &ldquo;{photo.reason}&rdquo;
+                      </p>
+                    )}
+
+                    <div className="flex items-center gap-3 mt-1">
+                      {!verifying && photo.verified === false && (
+                        <button
+                          onClick={handleRetakePhoto}
+                          className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-amber-600 hover:text-amber-700 transition-colors"
+                        >
+                          <RotateCcw className="h-3 w-3" />
+                          Try another photo
+                        </button>
+                      )}
+                      {neighborhoodSlug && (
+                        <button
+                          onClick={handleShareObjective}
+                          disabled={sharing}
+                          className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground hover:text-[#C9A84C] transition-colors disabled:opacity-50"
+                        >
+                          {sharing ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Share2 className="h-3 w-3" />
+                          )}
+                          {sharing ? "Creating..." : "Share"}
+                        </button>
+                      )}
                     </div>
                   </div>
-                </button>
+                </div>
 
-                {/* Share button for verified objectives */}
-                {neighborhoodSlug && (
-                  <button
-                    onClick={handleShareObjective}
-                    disabled={sharing}
-                    className="mt-2 inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground hover:text-[#C9A84C] transition-colors disabled:opacity-50"
-                  >
-                    {sharing ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                      <Share2 className="h-3 w-3" />
-                    )}
-                    {sharing ? "Creating..." : "Share to Stories"}
-                  </button>
+                {showPhotoFull && (
+                  <div className="mt-2 rounded-xl overflow-hidden border border-[#C9A84C]/20 shadow-md">
+                    <img
+                      src={photo.dataUrl}
+                      alt="Your photo proof"
+                      className="w-full aspect-[4/3] object-cover"
+                    />
+                  </div>
                 )}
-              </div>
-            )}
-
-            {/* Expanded photo view */}
-            {showPhotoFull && photo && (
-              <div className="mt-2 rounded-xl overflow-hidden border border-[#C9A84C]/20 shadow-md">
-                <img
-                  src={photo}
-                  alt="Your photo proof"
-                  className="w-full aspect-[4/3] object-cover"
-                />
               </div>
             )}
 
             {/* Completed without photo — offer to add one */}
             {completed && !photo && (
               <button
-                onClick={handleAddPhotoToCompleted}
+                onClick={handleRetakePhoto}
                 className="mt-3 inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground hover:text-[#C9A84C] transition-colors"
               >
                 <ImageIcon className="h-3 w-3" />
-                Add photo proof
+                Add photo proof · earn +{VERIFIED_PHOTO_XP} XP
               </button>
             )}
 

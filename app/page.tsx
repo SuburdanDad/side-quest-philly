@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Trophy, Stamp } from "lucide-react";
+import { Trophy, Stamp, Medal } from "lucide-react";
 import { Hero } from "@/components/landing/hero";
 import { NeighborhoodGrid } from "@/components/landing/neighborhood-grid";
 import { SecretQuestCTA } from "@/components/landing/secret-quest-cta";
@@ -79,6 +79,30 @@ export default function Home() {
                   </p>
                   <p className="text-[11px] text-white/60 mt-0.5">
                     XP, levels, stamps, and hidden achievements. Track your journey.
+                  </p>
+                </div>
+                <span className="text-[#C9A84C] text-lg font-bold">&rsaquo;</span>
+              </div>
+            </div>
+          </Link>
+        </section>
+
+        {/* Leaderboard CTA */}
+        <section className="animate-content-enter stagger-3">
+          <Link href="/leaderboard" className="block group">
+            <div className="relative rounded-xl overflow-hidden bg-[#0F1D36] p-4 text-white group-hover:shadow-lg transition-all">
+              <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#3C3B6E] via-[#C9A84C] to-[#B22234]" />
+              <div className="flex items-center gap-3">
+                <div className="flex-shrink-0 w-11 h-11 rounded-full bg-[#C9A84C]/20 flex items-center justify-center">
+                  <Medal className="h-5 w-5 text-[#C9A84C]" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-black text-sm uppercase tracking-wide">
+                    City Legends
+                  </p>
+                  <p className="text-[11px] text-white/60 mt-0.5">
+                    The leaderboard. AI-verified photos earn bonus XP. Where do
+                    you rank?
                   </p>
                 </div>
                 <span className="text-[#C9A84C] text-lg font-bold">&rsaquo;</span>

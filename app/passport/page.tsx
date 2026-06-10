@@ -1,24 +1,28 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, Share2 } from "lucide-react";
+import { ArrowLeft, Share2, Trophy, BadgeCheck } from "lucide-react";
 import { useQuestProgress } from "@/lib/hooks/use-quest-progress";
 import { useGamification } from "@/lib/hooks/use-gamification";
+import { usePhotoStorage } from "@/lib/hooks/use-photo-storage";
 import { NEIGHBORHOODS } from "@/lib/data/neighborhoods";
+import { ALL_OBJECTIVES } from "@/lib/data/all-objectives";
 import { LevelBadge } from "@/components/gamification/level-badge";
 import { PassportGrid } from "@/components/gamification/passport-grid";
 import { AchievementList } from "@/components/gamification/achievement-card";
-import { calculateXP } from "@/lib/gamification/xp";
+import { calculateTotalXP } from "@/lib/gamification/xp";
 
 export default function PassportPage() {
   const { progress, getOverallProgress } = useQuestProgress();
   const { gamification } = useGamification();
+  const { verifiedCount } = usePhotoStorage();
   const overall = getOverallProgress();
 
-  const allObjectives = NEIGHBORHOODS.flatMap((n) =>
-    n.objectives.map((o) => ({ id: o.id, category: o.category })),
+  const xp = calculateTotalXP(
+    progress.completedObjectives,
+    ALL_OBJECTIVES,
+    verifiedCount,
   );
-  const xp = calculateXP(progress.completedObjectives, allObjectives);
 
   const handleShare = async () => {
     const completed = progress.completedNeighborhoods.length;
@@ -34,7 +38,7 @@ export default function PassportPage() {
       a: String(gamification.achievements.length),
       obj: String(progress.completedObjectives.length),
     });
-    const shareUrl = `https://sidequestphilly.com/passport?${ogParams.toString()}`;
+    const shareUrl = `https://side-quest-philly.vercel.app/passport?${ogParams.toString()}`;
 
     const text = [
       `🗺️ Side Quest Philadelphia`,
@@ -112,7 +116,7 @@ export default function PassportPage() {
             {/* XP + Level */}
             <section className="bg-card border rounded-xl p-5 animate-content-enter">
               <LevelBadge xp={xp} size="lg" />
-              <div className="grid grid-cols-3 gap-3 mt-4 pt-4 border-t text-center">
+              <div className="grid grid-cols-4 gap-2 mt-4 pt-4 border-t text-center">
                 <div>
                   <p className="text-lg font-black">{overall.done}</p>
                   <p className="text-[10px] text-muted-foreground font-bold uppercase">
@@ -128,11 +132,20 @@ export default function PassportPage() {
                   </p>
                 </div>
                 <div>
+                  <p className="text-lg font-black text-[#C9A84C] flex items-center justify-center gap-0.5">
+                    <BadgeCheck className="h-4 w-4" />
+                    {verifiedCount}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground font-bold uppercase">
+                    Verified
+                  </p>
+                </div>
+                <div>
                   <p className="text-lg font-black">
                     {gamification.achievements.length}
                   </p>
                   <p className="text-[10px] text-muted-foreground font-bold uppercase">
-                    Achievements
+                    Awards
                   </p>
                 </div>
               </div>
@@ -153,14 +166,23 @@ export default function PassportPage() {
               </div>
             </section>
 
-            {/* Share button */}
-            <button
-              onClick={handleShare}
-              className="w-full flex items-center justify-center gap-2 rounded-xl bg-[#0F1D36] text-white py-3 font-bold text-sm hover:bg-[#0F1D36]/90 transition-colors"
-            >
-              <Share2 className="h-4 w-4" />
-              Share Your Passport
-            </button>
+            {/* Share + leaderboard */}
+            <div className="space-y-2.5">
+              <button
+                onClick={handleShare}
+                className="w-full flex items-center justify-center gap-2 rounded-xl bg-[#0F1D36] text-white py-3 font-bold text-sm hover:bg-[#0F1D36]/90 transition-colors"
+              >
+                <Share2 className="h-4 w-4" />
+                Share Your Passport
+              </button>
+              <Link
+                href="/leaderboard"
+                className="w-full flex items-center justify-center gap-2 rounded-xl border-2 border-[#C9A84C]/40 text-[#0F1D36] py-3 font-bold text-sm hover:bg-[#C9A84C]/10 transition-colors"
+              >
+                <Trophy className="h-4 w-4 text-[#C9A84C]" />
+                View the Leaderboard
+              </Link>
+            </div>
 
             {/* Achievements */}
             <section className="animate-content-enter stagger-3">

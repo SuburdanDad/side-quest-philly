@@ -129,6 +129,29 @@ export const ACHIEVEMENTS: Achievement[] = [
     rarity: "legendary",
     icon: "🤫",
   },
+
+  // Photo verification
+  {
+    id: "shutterbug",
+    name: "Shutterbug",
+    description: "Get 5 photos AI-verified",
+    rarity: "common",
+    icon: "\u{1F4F8}",
+  },
+  {
+    id: "photo-journalist",
+    name: "Photo Journalist",
+    description: "Get 15 photos AI-verified",
+    rarity: "rare",
+    icon: "\u{1F4F0}",
+  },
+  {
+    id: "city-documentarian",
+    name: "City Documentarian",
+    description: "Get 30 photos AI-verified",
+    rarity: "legendary",
+    icon: "\u{1F39E}️",
+  },
 ];
 
 const allObjectives = NEIGHBORHOODS.flatMap((n) => n.objectives);
@@ -137,6 +160,7 @@ export function checkAchievements(
   progress: QuestProgress,
   objectiveCompletedAt: Record<string, string>,
   alreadyEarned: string[],
+  verifiedPhotoCount = 0,
 ): string[] {
   const newAchievements: string[] = [];
   const now = new Date();
@@ -233,6 +257,18 @@ export function checkAchievements(
         earned = TIMS_FAVORITES.objectives.every((o) =>
           progress.completedObjectives.includes(o.id),
         );
+        break;
+
+      case "shutterbug":
+        earned = verifiedPhotoCount >= 5;
+        break;
+
+      case "photo-journalist":
+        earned = verifiedPhotoCount >= 15;
+        break;
+
+      case "city-documentarian":
+        earned = verifiedPhotoCount >= 30;
         break;
     }
 

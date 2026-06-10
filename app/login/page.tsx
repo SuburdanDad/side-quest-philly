@@ -1,16 +1,34 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Mail, Loader2 } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ArrowLeft, Mail, Loader2, Trophy } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
-export default function LoginPage() {
+/** Only allow same-origin paths so ?next= can't be an open redirect. */
+function safeNext(raw: string | null): string {
+  if (raw && raw.startsWith("/") && !raw.startsWith("//")) return raw;
+  return "/";
+}
+
+function LoginForm() {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "sent" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const { user } = useAuth();
+  const next = safeNext(searchParams.get("next"));
+  const forLeaderboard = next.startsWith("/leaderboard");
+
+  // Already signed in? Go straight to the destination.
+  useEffect(() => {
+    if (user) router.replace(next);
+  }, [user, next, router]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -26,7 +44,7 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
       },
     });
 
@@ -42,9 +60,18 @@ export default function LoginPage() {
     <main className="flex-1 flex items-center justify-center px-4 py-12">
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl">Sign In</CardTitle>
+          {forLeaderboard && (
+            <div className="mx-auto w-11 h-11 rounded-full bg-[#C9A84C]/15 flex items-center justify-center mb-1">
+              <Trophy className="h-5 w-5 text-[#C9A84C]" />
+            </div>
+          )}
+          <CardTitle className="text-2xl">
+            {forLeaderboard ? "Join the Leaderboard" : "Sign In"}
+          </CardTitle>
           <CardDescription>
-            Save your progress across devices and unlock all features.
+            {forLeaderboard
+              ? "One email, no password — see the rankings and claim your spot among the City Legends."
+              : "Save your progress across devices and unlock all features."}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -124,5 +151,13 @@ export default function LoginPage() {
         </CardContent>
       </Card>
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
   );
 }

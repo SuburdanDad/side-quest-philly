@@ -8,6 +8,9 @@ export const CATEGORY_XP: Record<ObjectiveCategory, number> = {
   "food-beverage": 25, // End on a high note - food is the reward
 };
 
+/** Bonus XP per objective whose photo passed AI verification. */
+export const VERIFIED_PHOTO_XP = 5;
+
 export const LEVELS: Level[] = [
   { name: "Tourist", minXP: 0, emoji: "\u{1F5FA}️" },
   { name: "Explorer", minXP: 50, emoji: "\u{1F9ED}" },
@@ -54,4 +57,20 @@ export function calculateXP(
     }
   }
   return total;
+}
+
+/**
+ * Objective XP plus the verified-photo bonus. This is the number shown
+ * everywhere in the app, and the get_leaderboard() Postgres function
+ * computes the same formula server-side — keep them in sync.
+ */
+export function calculateTotalXP(
+  completedObjectiveIds: string[],
+  allObjectives: { id: string; category: ObjectiveCategory }[],
+  verifiedPhotoCount: number,
+): number {
+  return (
+    calculateXP(completedObjectiveIds, allObjectives) +
+    Math.max(0, verifiedPhotoCount) * VERIFIED_PHOTO_XP
+  );
 }

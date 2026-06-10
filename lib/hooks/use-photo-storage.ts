@@ -1,17 +1,70 @@
 "use client";
 
-import { useCallback, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
+import { useAuth } from "@/components/auth/auth-provider";
+import { createClient } from "@/lib/supabase/client";
+import { syncAllPhotosToCloud } from "@/lib/photos/sync";
 
 const STORAGE_KEY = "sqp_photos";
 
-type PhotoStore = Record<string, string>; // objectiveId → data URL
+// One bulk upload per user per page load, even with many hook instances.
+const cloudSyncedUsers = new Set<string>();
+
+export type PhotoEntry = {
+  dataUrl: string;
+  /** true = AI verified, false = AI rejected, null = not verified (yet) */
+  verified: boolean | null;
+  /** One-liner from the AI judge, shown under the badge */
+  reason: string | null;
+  savedAt: string;
+};
+
+export type PhotoStore = Record<string, PhotoEntry>;
+
+/**
+ * v1 of this store kept plain data-URL strings. Normalize anything we
+ * find in localStorage into a PhotoEntry so old photos survive the
+ * upgrade; return null for junk.
+ */
+export function normalizePhotoEntry(raw: unknown): PhotoEntry | null {
+  if (typeof raw === "string") {
+    return raw.startsWith("data:image/")
+      ? { dataUrl: raw, verified: null, reason: null, savedAt: "" }
+      : null;
+  }
+  if (raw && typeof raw === "object" && "dataUrl" in raw) {
+    const entry = raw as Partial<PhotoEntry>;
+    if (
+      typeof entry.dataUrl === "string" &&
+      entry.dataUrl.startsWith("data:image/")
+    ) {
+      return {
+        dataUrl: entry.dataUrl,
+        verified: typeof entry.verified === "boolean" ? entry.verified : null,
+        reason: typeof entry.reason === "string" ? entry.reason : null,
+        savedAt: typeof entry.savedAt === "string" ? entry.savedAt : "",
+      };
+    }
+  }
+  return null;
+}
+
+export function countVerified(photos: PhotoStore): number {
+  return Object.values(photos).filter((p) => p.verified === true).length;
+}
 
 function getStoredPhotos(): PhotoStore {
   if (typeof window === "undefined") return {};
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return {};
-    return JSON.parse(raw) as PhotoStore;
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const store: PhotoStore = {};
+    for (const [id, value] of Object.entries(parsed)) {
+      const entry = normalizePhotoEntry(value);
+      if (entry) store[id] = entry;
+    }
+    return store;
   } catch {
     return {};
   }
@@ -94,16 +147,50 @@ export function usePhotoStorage() {
     getSnapshot,
     getServerSnapshot,
   );
+  const { user } = useAuth();
 
-  const savePhoto = useCallback(async (objectiveId: string, file: File) => {
-    const compressed = await compressImage(file);
-    const current = getStoredPhotos();
-    setStoredPhotos({ ...current, [objectiveId]: compressed });
-    return compressed;
-  }, []);
+  // On login, push local photos up so the leaderboard counts them.
+  useEffect(() => {
+    if (!user || cloudSyncedUsers.has(user.id)) return;
+    cloudSyncedUsers.add(user.id);
+    const supabase = createClient();
+    if (!supabase) return;
+    const stored = getStoredPhotos();
+    if (Object.keys(stored).length === 0) return;
+    syncAllPhotosToCloud(supabase, user.id, stored);
+  }, [user]);
+
+  const savePhoto = useCallback(
+    async (objectiveId: string, file: File): Promise<PhotoEntry> => {
+      const dataUrl = await compressImage(file);
+      const entry: PhotoEntry = {
+        dataUrl,
+        verified: null,
+        reason: null,
+        savedAt: new Date().toISOString(),
+      };
+      const current = getStoredPhotos();
+      setStoredPhotos({ ...current, [objectiveId]: entry });
+      return entry;
+    },
+    [],
+  );
+
+  const setVerification = useCallback(
+    (objectiveId: string, verified: boolean, reason: string | null) => {
+      const current = getStoredPhotos();
+      const existing = current[objectiveId];
+      if (!existing) return;
+      setStoredPhotos({
+        ...current,
+        [objectiveId]: { ...existing, verified, reason },
+      });
+    },
+    [],
+  );
 
   const getPhoto = useCallback(
-    (objectiveId: string): string | null => {
+    (objectiveId: string): PhotoEntry | null => {
       return photos[objectiveId] ?? null;
     },
     [photos],
@@ -122,5 +209,13 @@ export function usePhotoStorage() {
     [photos],
   );
 
-  return { photos, savePhoto, getPhoto, removePhoto, hasPhoto };
+  return {
+    photos,
+    savePhoto,
+    setVerification,
+    getPhoto,
+    removePhoto,
+    hasPhoto,
+    verifiedCount: countVerified(photos),
+  };
 }

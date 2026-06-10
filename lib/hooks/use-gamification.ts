@@ -61,7 +61,7 @@ export function useGamification() {
   );
 
   const recordObjectiveCompletion = useCallback(
-    (objectiveId: string, progress: QuestProgress) => {
+    (objectiveId: string, progress: QuestProgress, verifiedPhotoCount = 0) => {
       const current = getStoredState();
       const now = new Date().toISOString();
 
@@ -76,6 +76,7 @@ export function useGamification() {
         progress,
         objectiveCompletedAt,
         current.achievements,
+        verifiedPhotoCount,
       );
 
       // Build updated timestamps
@@ -116,9 +117,49 @@ export function useGamification() {
     });
   }, []);
 
+  // Verification lands after completion, so photo achievements
+  // (Shutterbug etc.) need their own check when a photo passes.
+  const recordVerification = useCallback(
+    (progress: QuestProgress, verifiedPhotoCount: number) => {
+      const current = getStoredState();
+      const now = new Date().toISOString();
+
+      const newAchievements = checkAchievements(
+        progress,
+        current.objectiveCompletedAt,
+        current.achievements,
+        verifiedPhotoCount,
+      );
+
+      if (newAchievements.length === 0) return [];
+
+      const achievementTimestamps = { ...current.achievementTimestamps };
+      for (const id of newAchievements) {
+        achievementTimestamps[id] = now;
+      }
+
+      setStoredState({
+        ...current,
+        achievements: [...current.achievements, ...newAchievements],
+        achievementTimestamps,
+      });
+
+      for (const id of newAchievements) {
+        setTimeout(
+          () => fireAchievementToast(id),
+          newAchievements.indexOf(id) * 600,
+        );
+      }
+
+      return newAchievements;
+    },
+    [],
+  );
+
   return {
     gamification,
     recordObjectiveCompletion,
     removeObjectiveCompletion,
+    recordVerification,
   };
 }

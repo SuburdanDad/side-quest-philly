@@ -5,8 +5,8 @@ import confetti from "canvas-confetti";
 import { Share2, Loader2 } from "lucide-react";
 import type { Neighborhood } from "@/lib/types";
 import { useGamification } from "@/lib/hooks/use-gamification";
-import { calculateXP } from "@/lib/gamification/xp";
-import { NEIGHBORHOODS } from "@/lib/data/neighborhoods";
+import { calculateTotalXP } from "@/lib/gamification/xp";
+import { ALL_OBJECTIVES } from "@/lib/data/all-objectives";
 import { useQuestProgress } from "@/lib/hooks/use-quest-progress";
 import { usePhotoStorage } from "@/lib/hooks/use-photo-storage";
 
@@ -44,23 +44,26 @@ export function CompletionModal({
   >("overlay");
   const { progress } = useQuestProgress();
   const { gamification } = useGamification();
-  const { photos } = usePhotoStorage();
+  const { photos, verifiedCount } = usePhotoStorage();
   const [sharing, setSharing] = useState(false);
 
-  const allObjectives = NEIGHBORHOODS.flatMap((n) =>
-    n.objectives.map((o) => ({ id: o.id, category: o.category })),
+  const xp = calculateTotalXP(
+    progress.completedObjectives,
+    ALL_OBJECTIVES,
+    verifiedCount,
   );
-  const xp = calculateXP(progress.completedObjectives, allObjectives);
 
-  // Find a photo from this neighborhood's objectives to use in the share card
-  const neighborhoodPhoto = neighborhood.objectives
+  // Prefer an AI-verified photo from this neighborhood for the share card
+  const neighborhoodEntries = neighborhood.objectives
     .map((o) => photos[o.id])
-    .find(Boolean);
+    .filter(Boolean);
+  const heroEntry =
+    neighborhoodEntries.find((e) => e.verified === true) ??
+    neighborhoodEntries[0];
+  const neighborhoodPhoto = heroEntry?.dataUrl;
 
   // Count photos taken in this neighborhood
-  const photoCount = neighborhood.objectives.filter(
-    (o) => photos[o.id],
-  ).length;
+  const photoCount = neighborhoodEntries.length;
 
   const fireConfetti = useCallback(() => {
     const colors = ["#0F1D36", "#C9A84C", "#B22234", "#3C3B6E"];
@@ -150,8 +153,9 @@ export function CompletionModal({
           neighborhood: neighborhood.slug,
           xp,
           stamps: progress.completedNeighborhoods.length,
-          objectiveTitle: `${photoCount}/${neighborhood.objectives.length} objectives verified`,
+          objectiveTitle: `All ${neighborhood.objectives.length} objectives complete`,
           photo: neighborhoodPhoto ?? undefined,
+          verified: heroEntry?.verified === true,
         }),
       });
 

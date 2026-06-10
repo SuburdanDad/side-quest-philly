@@ -45,16 +45,19 @@ const NEIGHBORHOOD_NAME: Record<string, string> = {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { neighborhood, xp, stamps, objectiveTitle, photo } = body as {
-      neighborhood: string;
-      xp: number;
-      stamps: number;
-      objectiveTitle: string;
-      photo?: string;
-    };
+    const { neighborhood, xp, stamps, objectiveTitle, photo, verified } =
+      body as {
+        neighborhood: string;
+        xp?: number;
+        stamps?: number;
+        objectiveTitle: string;
+        photo?: string;
+        verified?: boolean;
+      };
 
     const emoji = NEIGHBORHOOD_EMOJI[neighborhood] ?? "📍";
     const name = NEIGHBORHOOD_NAME[neighborhood] ?? neighborhood;
+    const showStats = typeof xp === "number" || typeof stamps === "number";
 
     return new ImageResponse(
       (
@@ -139,6 +142,7 @@ export async function POST(request: NextRequest) {
               <div
                 style={{
                   display: "flex",
+                  position: "relative",
                   width: 800,
                   height: 800,
                   borderRadius: 32,
@@ -158,6 +162,35 @@ export async function POST(request: NextRequest) {
                     objectFit: "cover",
                   }}
                 />
+                {verified && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      bottom: 24,
+                      right: 24,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      padding: "12px 24px",
+                      background: GOLD,
+                      borderRadius: 999,
+                      boxShadow: "0 8px 24px rgba(0,0,0,0.45)",
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: 22,
+                        fontWeight: 900,
+                        color: NAVY,
+                        letterSpacing: "0.08em",
+                        textTransform: "uppercase",
+                        display: "flex",
+                      }}
+                    >
+                      AI Verified
+                    </span>
+                  </div>
+                )}
               </div>
             ) : (
               <div
@@ -252,10 +285,10 @@ export async function POST(request: NextRequest) {
               )}
             </div>
 
-            {/* Stats row */}
+            {/* Stats row — only when the caller sends totals */}
             <div
               style={{
-                display: "flex",
+                display: showStats ? "flex" : "none",
                 gap: 48,
                 marginTop: 50,
                 alignItems: "center",
@@ -361,7 +394,7 @@ export async function POST(request: NextRequest) {
                   display: "flex",
                 }}
               >
-                sidequestphilly.com
+                side-quest-philly.vercel.app
               </span>
               <div
                 style={{
@@ -389,6 +422,10 @@ export async function POST(request: NextRequest) {
       },
     );
   } catch (error) {
+    console.error(
+      "[share-card] generation failed:",
+      error instanceof Error ? error.message : error,
+    );
     return new Response("Failed to generate share card", { status: 500 });
   }
 }

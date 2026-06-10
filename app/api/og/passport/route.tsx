@@ -297,7 +297,7 @@ export async function GET(request: NextRequest) {
               display: "flex",
             }}
           >
-            sidequestphilly.com · Summer 2026
+            side-quest-philly.vercel.app · Summer 2026
           </span>
         </div>
       </div>
