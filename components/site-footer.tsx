@@ -8,16 +8,28 @@ export function SiteFooter() {
         Side Quest Philadelphia
       </p>
       <p>Summer 2026 ... Celebrating 250 years of America</p>
-      <p>
+      <p className="space-x-1.5">
+        <span className="font-bold">@SideQuestPhilly</span>
+        <span>·</span>
         <a
           href="https://x.com/SideQuestPhilly"
           target="_blank"
           rel="noopener noreferrer"
           className="font-bold text-[#C9A84C] hover:underline"
         >
-          @SideQuestPhilly
+          X
         </a>
-        {" · #SideQuestPhilly"}
+        <span>·</span>
+        <a
+          href="https://www.instagram.com/sidequestphilly"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-bold text-[#C9A84C] hover:underline"
+        >
+          Instagram
+        </a>
+        <span>·</span>
+        <span>#SideQuestPhilly</span>
       </p>
       <FeedbackButton />
     </footer>
