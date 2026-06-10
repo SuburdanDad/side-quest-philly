@@ -9,6 +9,7 @@ import {
 } from "react";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
+import { trackEvent, once } from "@/lib/analytics";
 
 type AuthContextType = {
   user: User | null;
@@ -43,6 +44,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
       setLoading(false);
+      if (session?.user && once(`signup_${session.user.id}`, "forever")) {
+        trackEvent("signup");
+      }
     });
 
     return () => subscription.unsubscribe();

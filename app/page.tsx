@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Trophy, Stamp, Medal } from "lucide-react";
+import { FeedbackButton } from "@/components/feedback-button";
 import { Hero } from "@/components/landing/hero";
 import { NeighborhoodGrid } from "@/components/landing/neighborhood-grid";
 import { SecretQuestCTA } from "@/components/landing/secret-quest-cta";
@@ -135,11 +136,12 @@ export default function Home() {
           </Link>
         </section>
 
-        <footer className="text-center text-[10px] text-muted-foreground py-6 border-t space-y-0.5">
+        <footer className="text-center text-[10px] text-muted-foreground py-6 border-t space-y-2">
           <p className="font-bold uppercase tracking-widest">
             Side Quest Philadelphia
           </p>
           <p>Summer 2026 ... Celebrating 250 years of America</p>
+          <FeedbackButton />
         </footer>
       </div>
     </main>

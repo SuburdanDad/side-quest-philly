@@ -23,9 +23,14 @@ Neighborhood scavenger hunt app for Philadelphia, tied to summer 2026 (FIFA Worl
 - `lib/hooks/use-photo-storage.ts` — photo proof store (PhotoEntry: dataUrl/verified/reason) + cloud sync on login
 - `lib/photos/verification.ts` — pure AI-judge helpers (prompts, schema, clamping)
 - `lib/photos/sync.ts` — Supabase Storage upload + user_progress photo columns
-- `app/api/verify-photo/` — AI vision judge (graceful no-op without gateway creds)
+- `app/api/verify-photo/` — AI vision judge (graceful no-op without gateway creds); emits photo_verified/photo_rejected events server-side
 - `app/api/share-card/` — 1080x1920 IG Stories card (next/og)
 - `app/leaderboard/` — email-gated City Legends board (get_leaderboard RPC)
+- `lib/analytics.ts` — first-party events: anon id, first-touch ?src=, log_event RPC
+- `app/q/[slug]/` — QR deep links (307 → quest with src=qr-{slug})
+- `app/posters/` — printable QR posters (master + 9 neighborhoods)
+- `app/admin/funnel/` — admin-only launch dashboard (get_funnel_stats / get_recent_feedback RPCs, gated by admin_emails table)
+- `components/feedback-button.tsx` — "Tell us what you think" → submit_feedback RPC
 - `app/page.tsx` — Landing page (hero, events, neighborhood grid, ultimate CTA)
 - `app/quest/[slug]/` — Individual neighborhood quest pages
 - `app/ultimate/` — City-wide 10-objective ultimate quest
@@ -45,7 +50,8 @@ npm run dev  # runs on port 3003
 
 ## Key Decisions
 
-- All quest data is static TypeScript constants — no database needed
+- Curated quest data is static TypeScript constants; the DB mirrors it (quests/objectives tables) for sync FKs, leaderboard XP, and analytics
+- Analytics/feedback have NO direct table access — everything goes through validated SECURITY DEFINER RPCs (log_event, submit_feedback, get_funnel_stats); zero new env vars
 - Progress stored in localStorage under key `sqp_progress`
 - `useSyncExternalStore` for SSR-safe localStorage reads
 - `generateStaticParams` pre-renders all 6 quest pages

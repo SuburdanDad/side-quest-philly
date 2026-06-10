@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import type { Neighborhood } from "@/lib/types";
+import { trackEvent, once } from "@/lib/analytics";
 import { useQuestProgress } from "@/lib/hooks/use-quest-progress";
 import { ProgressRing } from "@/components/quest/progress-ring";
 import { ObjectiveItem } from "@/components/quest/objective-item";
@@ -22,6 +23,12 @@ export function QuestPageClient({ neighborhood }: QuestPageClientProps) {
   const prevDoneRef = useRef(done);
 
   const isComplete = progress.completedNeighborhoods.includes(neighborhood.id);
+
+  useEffect(() => {
+    if (once(`start_${neighborhood.slug}`)) {
+      trackEvent("quest_start", { questId: neighborhood.slug });
+    }
+  }, [neighborhood.slug]);
 
   function handleObjectiveComplete() {
     const newProgress = done + 1;

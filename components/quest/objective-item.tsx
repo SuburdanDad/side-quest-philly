@@ -12,6 +12,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import type { Objective } from "@/lib/types";
+import { trackEvent } from "@/lib/analytics";
 import { useQuestProgress } from "@/lib/hooks/use-quest-progress";
 import { useGamification } from "@/lib/hooks/use-gamification";
 import { usePhotoStorage } from "@/lib/hooks/use-photo-storage";
@@ -78,9 +79,15 @@ export function ObjectiveItem({
     setXpFlash(true);
     setTimeout(() => setXpFlash(false), 1500);
 
+    trackEvent("objective_complete", {
+      questId: neighborhoodSlug,
+      objectiveId: objective.id,
+    });
+
     if (onComplete) onComplete();
   }, [
     objective.id,
+    neighborhoodSlug,
     toggleObjective,
     progress,
     recordObjectiveCompletion,
@@ -193,6 +200,7 @@ export function ObjectiveItem({
   async function handleShareObjective() {
     if (!photo || !neighborhoodSlug) return;
     setSharing(true);
+    trackEvent("share", { questId: neighborhoodSlug, objectiveId: objective.id });
 
     try {
       const response = await fetch("/api/share-card", {

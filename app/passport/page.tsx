@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { ArrowLeft, Share2, Trophy, BadgeCheck } from "lucide-react";
+import { trackEvent } from "@/lib/analytics";
+import { FeedbackButton } from "@/components/feedback-button";
 import { useQuestProgress } from "@/lib/hooks/use-quest-progress";
 import { useGamification } from "@/lib/hooks/use-gamification";
 import { usePhotoStorage } from "@/lib/hooks/use-photo-storage";
@@ -25,6 +27,7 @@ export default function PassportPage() {
   );
 
   const handleShare = async () => {
+    trackEvent("share");
     const completed = progress.completedNeighborhoods.length;
     const total = NEIGHBORHOODS.length;
     const grid = NEIGHBORHOODS.map((n) =>
@@ -201,11 +204,12 @@ export default function PassportPage() {
           </>
         )}
 
-        <footer className="text-center text-[10px] text-muted-foreground py-6 border-t space-y-0.5">
+        <footer className="text-center text-[10px] text-muted-foreground py-6 border-t space-y-2">
           <p className="font-bold uppercase tracking-widest">
             Side Quest Philadelphia
           </p>
           <p>Summer 2026 ... Celebrating 250 years of America</p>
+          <FeedbackButton />
         </footer>
       </div>
     </main>

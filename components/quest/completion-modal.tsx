@@ -4,6 +4,7 @@ import { useEffect, useCallback, useState } from "react";
 import confetti from "canvas-confetti";
 import { Share2, Loader2 } from "lucide-react";
 import type { Neighborhood } from "@/lib/types";
+import { trackEvent } from "@/lib/analytics";
 import { useGamification } from "@/lib/hooks/use-gamification";
 import { calculateTotalXP } from "@/lib/gamification/xp";
 import { ALL_OBJECTIVES } from "@/lib/data/all-objectives";
@@ -168,6 +169,7 @@ export function CompletionModal({
 
   async function handleShareWithImage() {
     setSharing(true);
+    trackEvent("share", { questId: neighborhood.slug });
     try {
       const blob = await generateShareCard();
 

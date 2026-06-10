@@ -4,6 +4,7 @@ import {
   UNAVAILABLE,
   type VerificationResult,
 } from "@/lib/photos/verification";
+import { getAnonId } from "@/lib/analytics";
 
 /**
  * Ask the AI judge whether this photo completes the objective.
@@ -17,7 +18,7 @@ export async function requestPhotoVerification(
     const response = await fetch("/api/verify-photo", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ objectiveId, photo: dataUrl }),
+      body: JSON.stringify({ objectiveId, photo: dataUrl, anonId: getAnonId() }),
     });
     if (!response.ok) return UNAVAILABLE;
     const result = (await response.json()) as VerificationResult;
