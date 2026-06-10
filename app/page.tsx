@@ -136,6 +136,21 @@ export default function Home() {
           </Link>
         </section>
 
+        {/* Suggestions CTA */}
+        <section className="animate-content-enter stagger-4">
+          <Link href="/suggestions" className="block group">
+            <div className="rounded-xl border-2 border-dashed border-[#C9A84C]/40 bg-[#C9A84C]/5 p-3.5 group-hover:border-[#C9A84C]/70 transition-colors">
+              <p className="text-sm text-center">
+                💡 <span className="font-bold">Got an idea?</span>{" "}
+                <span className="text-muted-foreground">
+                  Suggest a spot, a feature, anything — help shape the quest
+                </span>{" "}
+                <span className="text-[#C9A84C] font-bold">&rsaquo;</span>
+              </p>
+            </div>
+          </Link>
+        </section>
+
         <SiteFooter />
       </div>
     </main>

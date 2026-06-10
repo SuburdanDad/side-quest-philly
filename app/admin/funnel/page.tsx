@@ -14,6 +14,7 @@ type FunnelStats = {
   daily_starts: { day: string; count: number }[];
   verification: { verified: number; rejected: number };
   feedback_count: number;
+  suggestions_count: number;
 };
 
 type FeedbackRow = {
@@ -23,10 +24,27 @@ type FeedbackRow = {
   created_at: string;
 };
 
+type SuggestionRow = {
+  id: number;
+  category: string;
+  neighborhood: string | null;
+  message: string;
+  email: string | null;
+  created_at: string;
+};
+
+const CATEGORY_LABELS: Record<string, string> = {
+  spot: "📍 Spot",
+  feature: "✨ Feature",
+  bug: "🐛 Bug",
+  general: "💬 General",
+};
+
 export default function FunnelPage() {
   const { user, loading: authLoading } = useAuth();
   const [stats, setStats] = useState<FunnelStats | null>(null);
   const [feedback, setFeedback] = useState<FeedbackRow[]>([]);
+  const [suggestions, setSuggestions] = useState<SuggestionRow[]>([]);
   const [state, setState] = useState<"loading" | "ready" | "denied">("loading");
 
   const load = useCallback(async () => {
@@ -36,9 +54,10 @@ export default function FunnelPage() {
       return;
     }
     setState("loading");
-    const [statsRes, fbRes] = await Promise.all([
+    const [statsRes, fbRes, sugRes] = await Promise.all([
       supabase.rpc("get_funnel_stats"),
       supabase.rpc("get_recent_feedback", { limit_count: 50 }),
+      supabase.rpc("get_recent_suggestions", { limit_count: 50 }),
     ]);
     if (statsRes.error) {
       setState("denied");
@@ -46,6 +65,7 @@ export default function FunnelPage() {
     }
     setStats(statsRes.data as FunnelStats);
     setFeedback((fbRes.data ?? []) as FeedbackRow[]);
+    setSuggestions((sugRes.data ?? []) as SuggestionRow[]);
     setState("ready");
   }, []);
 
@@ -136,7 +156,12 @@ export default function FunnelPage() {
                 },
                 { label: "Shares", value: totals.share ?? 0 },
                 { label: "Signups", value: stats?.signups ?? 0 },
-                { label: "Feedback", value: stats?.feedback_count ?? 0 },
+                {
+                  label: "Ideas",
+                  value:
+                    (stats?.feedback_count ?? 0) +
+                    (stats?.suggestions_count ?? 0),
+                },
                 { label: "QR scans", value: totals.quest_start ? (stats?.starts_by_src ?? []).filter(s => s.src.startsWith("qr-")).reduce((a, s) => a + s.count, 0) : 0 },
               ].map((card) => (
                 <div
@@ -206,6 +231,35 @@ export default function FunnelPage() {
                       />
                     );
                   })}
+                </div>
+              )}
+            </section>
+
+            {/* Suggestions */}
+            <section className="bg-card border rounded-xl p-4">
+              <h2 className="text-xs font-black uppercase tracking-wide text-muted-foreground mb-3">
+                Suggestions · {suggestions.length} recent
+              </h2>
+              {suggestions.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No suggestions yet — they&apos;ll land here from
+                  /suggestions.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {suggestions.map((s) => (
+                    <div key={s.id} className="border-b pb-2 last:border-0">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-[#C9A84C]">
+                        {CATEGORY_LABELS[s.category] ?? s.category}
+                        {s.neighborhood ? ` · ${s.neighborhood}` : ""}
+                      </p>
+                      <p className="text-sm leading-snug mt-0.5">{s.message}</p>
+                      <p className="mt-0.5 text-[10px] text-muted-foreground">
+                        {s.email ? `${s.email} · ` : ""}
+                        {new Date(s.created_at).toLocaleString()}
+                      </p>
+                    </div>
+                  ))}
                 </div>
               )}
             </section>

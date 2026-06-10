@@ -1,6 +1,8 @@
+import Link from "next/link";
+import { Lightbulb } from "lucide-react";
 import { FeedbackButton } from "@/components/feedback-button";
 
-/** Shared footer: brand line, X account, feedback entry point. */
+/** Shared footer: brand line, socials, feedback + suggestions entry points. */
 export function SiteFooter() {
   return (
     <footer className="text-center text-[10px] text-muted-foreground py-6 border-t space-y-2">
@@ -31,7 +33,16 @@ export function SiteFooter() {
         <span>·</span>
         <span>#SideQuestPhilly</span>
       </p>
-      <FeedbackButton />
+      <div className="flex items-center justify-center gap-4">
+        <FeedbackButton />
+        <Link
+          href="/suggestions"
+          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-[#C9A84C] transition-colors"
+        >
+          <Lightbulb className="h-3.5 w-3.5" />
+          Suggest an idea
+        </Link>
+      </div>
     </footer>
   );
 }
