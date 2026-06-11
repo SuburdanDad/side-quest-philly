@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 import type { QuestProgress } from "@/lib/types";
 import { NEIGHBORHOODS } from "@/lib/data/neighborhoods";
+import { ALL_OBJECTIVES } from "@/lib/data/all-objectives";
 import { ULTIMATE_QUEST_IDS } from "@/lib/data/quests";
 import { useAuth } from "@/components/auth/auth-provider";
 import { createClient } from "@/lib/supabase/client";
@@ -179,11 +180,12 @@ export function useQuestProgress() {
   );
 
   const getOverallProgress = useCallback(() => {
-    const total = NEIGHBORHOODS.reduce(
-      (sum, n) => sum + n.objectives.length,
-      0,
-    );
-    return { done: progress.completedObjectives.length, total };
+    // Total spans everything completable (core + secret + chapters)
+    // so "done" can never exceed it.
+    return {
+      done: progress.completedObjectives.length,
+      total: ALL_OBJECTIVES.length,
+    };
   }, [progress]);
 
   const resetAll = useCallback(() => {

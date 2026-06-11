@@ -17,7 +17,9 @@ Neighborhood scavenger hunt app for Philadelphia, tied to summer 2026 (FIFA Worl
 - `lib/data/quests.ts` — All 45 objectives (9 neighborhoods x 5)
 - `lib/data/neighborhoods.ts` — Neighborhood metadata + objective assembly
 - `lib/data/secret-quests.ts` — Tim's Favorites (8 objectives, timf-*)
-- `lib/data/all-objectives.ts` — ALL_OBJECTIVES (53) + findObjective lookup; XP source of truth
+- `lib/data/chapters.ts` — Chapter II content wave (45 objectives, {prefix}2-NN)
+- `lib/data/all-objectives.ts` — ALL_OBJECTIVES (98) + findObjective lookup; XP source of truth
+- `scripts/gen-chapter-sql.ts` — generates wave migrations FROM chapters.ts (never hand-write rows)
 - `lib/data/events.ts` — Summer 2026 event info
 - `lib/hooks/use-quest-progress.ts` — localStorage hook with useSyncExternalStore
 - `lib/hooks/use-photo-storage.ts` — photo proof store (PhotoEntry: dataUrl/verified/reason) + cloud sync on login
@@ -38,9 +40,20 @@ Neighborhood scavenger hunt app for Philadelphia, tied to summer 2026 (FIFA Worl
 ## Game economy (keep in sync!)
 
 - XP: history 10 / culture 15 / entertainment 20 / food-beverage 25, **+5 per AI-verified photo**
-- Client: `calculateTotalXP` in `lib/gamification/xp.ts` over ALL_OBJECTIVES (53)
+- Client: `calculateTotalXP` in `lib/gamification/xp.ts` over ALL_OBJECTIVES (98)
 - Server: `get_leaderboard()` Postgres fn mirrors the same formula — change both or neither
+- **Stamps = core 45 only.** Client: NEIGHBORHOODS.objectives. Server: `quests.counts_for_stamp`. Chapters/secret quests NEVER mint stamps.
+- Milestone achievements (halfway-hero, completionist) count CORE completions only
 - Photo achievements: shutterbug (5 verified), photo-journalist (15), city-documentarian (30)
+
+## Adding a content wave (the repeatable pipeline)
+
+1. Write objectives in `lib/data/chapters.ts` (new CHAPTER_III map; ids `{prefix}3-NN`, never reuse)
+2. Wire into `all-objectives.ts` (ALL_OBJECTIVES + LOOKUP with quest context)
+3. `npx -y tsx scripts/gen-chapter-sql.ts > /tmp/wave.sql` — apply as a migration with
+   the quests rows set `counts_for_stamp = false`
+4. Render where appropriate (quest page section like ChapterTwoSection)
+5. Update test/chapters.test.ts totals; run suite; ship. No leaderboard changes ever needed.
 
 ## Dev
 

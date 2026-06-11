@@ -34,10 +34,10 @@ function progressWith(completed: string[]): QuestProgress {
 }
 
 describe("ALL_OBJECTIVES", () => {
-  it("contains all 53 objectives (45 neighborhood + 8 secret quest)", () => {
-    expect(ALL_OBJECTIVES).toHaveLength(53);
+  it("contains all 98 objectives (45 core + 8 secret + 45 Chapter II)", () => {
+    expect(ALL_OBJECTIVES).toHaveLength(98);
     const ids = new Set(ALL_OBJECTIVES.map((o) => o.id));
-    expect(ids.size).toBe(53);
+    expect(ids.size).toBe(98);
   });
 
   it("finds neighborhood and secret-quest objectives with context", () => {

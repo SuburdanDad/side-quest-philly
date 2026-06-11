@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import type { Neighborhood } from "@/lib/types";
 import { trackEvent, once } from "@/lib/analytics";
+import { CHAPTER_II } from "@/lib/data/chapters";
 import { useQuestProgress } from "@/lib/hooks/use-quest-progress";
 import { ProgressRing } from "@/components/quest/progress-ring";
 import { ObjectiveItem } from "@/components/quest/objective-item";
@@ -131,6 +132,11 @@ export function QuestPageClient({ neighborhood }: QuestPageClientProps) {
           ))}
         </div>
 
+        {/* Chapter II — second content wave, optional, no stamp impact */}
+        {(CHAPTER_II[neighborhood.id] ?? []).length > 0 && (
+          <ChapterTwoSection neighborhood={neighborhood} />
+        )}
+
         {/* Local secret — unlockable bonus content */}
         {neighborhood.localSecret && (
           <LocalSecretCard
@@ -156,5 +162,51 @@ export function QuestPageClient({ neighborhood }: QuestPageClientProps) {
         onClose={() => setShowCompletion(false)}
       />
     </main>
+  );
+}
+
+/**
+ * Chapter II: five more stops for a second visit (or a longer first
+ * one). Separate from the core five — completing these earns XP and
+ * verified photos but never affects the neighborhood stamp, and never
+ * triggers the stamp celebration modal.
+ */
+function ChapterTwoSection({ neighborhood }: { neighborhood: Neighborhood }) {
+  const { progress } = useQuestProgress();
+  const chapter = CHAPTER_II[neighborhood.id] ?? [];
+  const done = chapter.filter((o) =>
+    progress.completedObjectives.includes(o.id),
+  ).length;
+  const allDone = done === chapter.length;
+
+  return (
+    <section className="mt-8">
+      <div className="flex items-center justify-between mb-1">
+        <h2 className="text-xs font-black uppercase tracking-wide text-muted-foreground">
+          Chapter II · {done}/{chapter.length}
+        </h2>
+        <span
+          className="text-[10px] font-bold uppercase tracking-wider"
+          style={{ color: neighborhood.color }}
+        >
+          {allDone ? "Chapter complete!" : "Bonus quests"}
+        </span>
+      </div>
+      <p className="text-xs text-muted-foreground mb-3">
+        Five more stops for your second visit — or a longer first one.
+        Same XP, same AI verification, deeper cuts.
+      </p>
+
+      <div className="space-y-2.5">
+        {chapter.map((objective, index) => (
+          <ObjectiveItem
+            key={objective.id}
+            objective={objective}
+            index={index}
+            neighborhoodSlug={neighborhood.slug}
+          />
+        ))}
+      </div>
+    </section>
   );
 }

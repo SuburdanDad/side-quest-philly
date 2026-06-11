@@ -155,6 +155,13 @@ export const ACHIEVEMENTS: Achievement[] = [
 ];
 
 const allObjectives = NEIGHBORHOODS.flatMap((n) => n.objectives);
+const CORE_OBJECTIVE_IDS = new Set(allObjectives.map((o) => o.id));
+
+/** Count only core-45 completions — Chapter II and secret-quest
+ *  objectives never inflate the milestone achievements. */
+function coreCompletedCount(completed: string[]): number {
+  return completed.filter((id) => CORE_OBJECTIVE_IDS.has(id)).length;
+}
 
 export function checkAchievements(
   progress: QuestProgress,
@@ -180,11 +187,11 @@ export function checkAchievements(
         break;
 
       case "halfway-hero":
-        earned = progress.completedObjectives.length >= 23; // 45 / 2 rounded up
+        earned = coreCompletedCount(progress.completedObjectives) >= 23; // 45 / 2 rounded up
         break;
 
       case "completionist":
-        earned = progress.completedObjectives.length >= 45;
+        earned = coreCompletedCount(progress.completedObjectives) >= 45;
         break;
 
       case "historian":
