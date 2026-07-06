@@ -68,7 +68,9 @@ function toCsv(rows: VisitorRow[]): string {
 export default function VisitorsPage() {
   const { user, loading: authLoading } = useAuth();
   const [rows, setRows] = useState<VisitorRow[]>([]);
-  const [state, setState] = useState<"loading" | "ready" | "denied">("loading");
+  const [state, setState] = useState<
+    "loading" | "ready" | "denied" | "error"
+  >("loading");
 
   const load = useCallback(async () => {
     const supabase = createClient();
@@ -81,7 +83,11 @@ export default function VisitorsPage() {
       limit_count: 500,
     });
     if (error) {
-      setState("denied");
+      // "not authorized" = the admin gate; anything else is a real
+      // failure and should say so instead of showing the lock.
+      setState(
+        error.message?.includes("not authorized") ? "denied" : "error",
+      );
       return;
     }
     setRows((data ?? []) as VisitorRow[]);
@@ -155,6 +161,14 @@ export default function VisitorsPage() {
                   </Link>
                 </>
               )}
+            </p>
+          </section>
+        ) : state === "error" ? (
+          <section className="bg-card border rounded-xl p-8 text-center">
+            <p className="text-4xl mb-3">⚠️</p>
+            <p className="text-sm text-muted-foreground">
+              You&apos;re signed in fine — the visitor query itself failed.
+              Hit refresh above to retry.
             </p>
           </section>
         ) : (
