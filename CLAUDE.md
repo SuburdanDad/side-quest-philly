@@ -28,7 +28,9 @@ Neighborhood scavenger hunt app for Philadelphia, tied to summer 2026 (FIFA Worl
 - `app/api/verify-photo/` — AI vision judge (graceful no-op without gateway creds); emits photo_verified/photo_rejected events server-side
 - `app/api/share-card/` — 1080x1920 IG Stories card (next/og)
 - `app/leaderboard/` — email-gated City Legends board (get_leaderboard RPC)
-- `lib/analytics.ts` — first-party events: anon id, first-touch ?src=, log_event RPC
+- `lib/analytics.ts` — first-party events: anon id, first-touch ?src=, daily session_start; POSTs to /api/events
+- `app/api/events/` — event ingestion + enrichment (country via x-vercel-ip-country, device via lib/device.ts); verdict events NOT accepted here (verify route only)
+- `app/admin/visitors/` — per-visitor histories (first/last seen, source, country, activity, email) + CSV export
 - `app/q/[slug]/` — QR deep links (307 → quest with src=qr-{slug})
 - `app/posters/` — printable QR posters (master + 9 neighborhoods)
 - `app/admin/funnel/` — admin-only launch dashboard (get_funnel_stats / get_recent_feedback RPCs, gated by admin_emails table)

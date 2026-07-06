@@ -33,6 +33,44 @@ type SuggestionRow = {
   created_at: string;
 };
 
+type AnalyticsReport = {
+  overview: {
+    visitors: number;
+    identified_users: number;
+    returning_visitors: number;
+    total_events: number;
+    first_event_at: string | null;
+  };
+  funnel: {
+    visitors: number;
+    started_quest: number;
+    completed_objective: number;
+    verified_photo: number;
+    signed_up: number;
+  };
+  daily: { day: string; visitors: number; events: number }[];
+  weekly: { week: string; visitors: number }[];
+  by_neighborhood: {
+    quest_id: string;
+    starts: number;
+    completes: number;
+    verified: number;
+  }[];
+  toughest_objectives: {
+    objective_id: string;
+    verified: number;
+    rejected: number;
+  }[];
+  by_country: { country: string; visitors: number }[];
+  by_device: { device: string; visitors: number }[];
+  referrers: { referrer: string; visitors: number }[];
+};
+
+function pct(part: number, whole: number): string {
+  if (!whole) return "—";
+  return `${Math.round((part / whole) * 100)}%`;
+}
+
 const CATEGORY_LABELS: Record<string, string> = {
   spot: "📍 Spot",
   feature: "✨ Feature",
@@ -43,6 +81,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 export default function FunnelPage() {
   const { user, loading: authLoading } = useAuth();
   const [stats, setStats] = useState<FunnelStats | null>(null);
+  const [report, setReport] = useState<AnalyticsReport | null>(null);
   const [feedback, setFeedback] = useState<FeedbackRow[]>([]);
   const [suggestions, setSuggestions] = useState<SuggestionRow[]>([]);
   const [state, setState] = useState<"loading" | "ready" | "denied">("loading");
@@ -54,8 +93,9 @@ export default function FunnelPage() {
       return;
     }
     setState("loading");
-    const [statsRes, fbRes, sugRes] = await Promise.all([
+    const [statsRes, reportRes, fbRes, sugRes] = await Promise.all([
       supabase.rpc("get_funnel_stats"),
+      supabase.rpc("get_analytics_report"),
       supabase.rpc("get_recent_feedback", { limit_count: 50 }),
       supabase.rpc("get_recent_suggestions", { limit_count: 50 }),
     ]);
@@ -64,6 +104,7 @@ export default function FunnelPage() {
       return;
     }
     setStats(statsRes.data as FunnelStats);
+    setReport((reportRes.data ?? null) as AnalyticsReport | null);
     setFeedback((fbRes.data ?? []) as FeedbackRow[]);
     setSuggestions((sugRes.data ?? []) as SuggestionRow[]);
     setState("ready");
@@ -179,6 +220,179 @@ export default function FunnelPage() {
                 </div>
               ))}
             </section>
+
+            {/* Visitors link */}
+            <Link
+              href="/admin/visitors"
+              className="block rounded-xl border-2 border-[#C9A84C]/40 bg-[#C9A84C]/5 p-3 text-center text-sm font-bold hover:border-[#C9A84C]/70 transition-colors"
+            >
+              👥 Visitor histories — every explorer, all time &rsaquo;
+            </Link>
+
+            {/* Conversion funnel */}
+            {report && (
+              <section className="bg-card border rounded-xl p-4">
+                <h2 className="text-xs font-black uppercase tracking-wide text-muted-foreground mb-3">
+                  Conversion · all time
+                  {report.overview.first_event_at &&
+                    ` since ${new Date(report.overview.first_event_at).toLocaleDateString()}`}
+                </h2>
+                <div className="space-y-1.5">
+                  {[
+                    { label: "Visited", value: report.funnel.visitors },
+                    { label: "Started a quest", value: report.funnel.started_quest },
+                    { label: "Completed an objective", value: report.funnel.completed_objective },
+                    { label: "Got a photo AI-verified", value: report.funnel.verified_photo },
+                    { label: "Signed up (email)", value: report.funnel.signed_up },
+                  ].map((step, i, steps) => (
+                    <div key={step.label} className="flex items-center gap-2">
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-medium">{step.label}</span>
+                          <span className="font-mono tabular-nums font-bold">
+                            {step.value}
+                            <span className="ml-1.5 text-muted-foreground font-normal">
+                              {i === 0
+                                ? ""
+                                : pct(step.value, steps[0].value)}
+                            </span>
+                          </span>
+                        </div>
+                        <div className="mt-0.5 h-1.5 rounded bg-muted overflow-hidden">
+                          <div
+                            className="h-full rounded bg-[#C9A84C]"
+                            style={{
+                              width: `${steps[0].value ? Math.max((step.value / steps[0].value) * 100, step.value > 0 ? 3 : 0) : 0}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-3 text-[10px] text-muted-foreground">
+                  {report.overview.returning_visitors} returning visitors ·{" "}
+                  {report.overview.identified_users} identified by email ·{" "}
+                  {report.overview.total_events} events all time
+                </p>
+              </section>
+            )}
+
+            {/* Countries + devices */}
+            {report &&
+              (report.by_country.length > 0 || report.by_device.length > 0) && (
+                <section className="bg-card border rounded-xl p-4">
+                  <h2 className="text-xs font-black uppercase tracking-wide text-muted-foreground mb-3">
+                    Where &amp; what they play on
+                  </h2>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      {report.by_country.slice(0, 8).map((c) => (
+                        <div
+                          key={c.country}
+                          className="flex items-center justify-between text-sm"
+                        >
+                          <span className="font-medium">{c.country}</span>
+                          <span className="font-mono tabular-nums font-bold">
+                            {c.visitors}
+                          </span>
+                        </div>
+                      ))}
+                      {report.by_country.length === 0 && (
+                        <p className="text-xs text-muted-foreground">
+                          Countries appear as events arrive.
+                        </p>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      {report.by_device.map((d) => (
+                        <div
+                          key={d.device}
+                          className="flex items-center justify-between text-sm"
+                        >
+                          <span className="font-medium capitalize">
+                            {d.device}
+                          </span>
+                          <span className="font-mono tabular-nums font-bold">
+                            {d.visitors}
+                          </span>
+                        </div>
+                      ))}
+                      {report.by_device.length === 0 && (
+                        <p className="text-xs text-muted-foreground">
+                          Devices appear as events arrive.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </section>
+              )}
+
+            {/* Neighborhood engagement */}
+            {report && report.by_neighborhood.length > 0 && (
+              <section className="bg-card border rounded-xl p-4">
+                <h2 className="text-xs font-black uppercase tracking-wide text-muted-foreground mb-3">
+                  Neighborhood engagement · all time
+                </h2>
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    <span>Quest</span>
+                    <span className="flex gap-4">
+                      <span className="w-10 text-right">Starts</span>
+                      <span className="w-10 text-right">Done</span>
+                      <span className="w-10 text-right">Verif.</span>
+                    </span>
+                  </div>
+                  {report.by_neighborhood.map((n) => (
+                    <div
+                      key={n.quest_id}
+                      className="flex items-center justify-between text-sm"
+                    >
+                      <span className="font-medium truncate">{n.quest_id}</span>
+                      <span className="flex gap-4 font-mono tabular-nums">
+                        <span className="w-10 text-right">{n.starts}</span>
+                        <span className="w-10 text-right">{n.completes}</span>
+                        <span className="w-10 text-right text-[#C9A84C] font-bold">
+                          {n.verified}
+                        </span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* Toughest objectives (AI rejections) */}
+            {report && report.toughest_objectives.length > 0 && (
+              <section className="bg-card border rounded-xl p-4">
+                <h2 className="text-xs font-black uppercase tracking-wide text-muted-foreground mb-3">
+                  Toughest photo verifications
+                </h2>
+                <p className="text-[10px] text-muted-foreground mb-2">
+                  High rejection counts can mean a too-strict verification
+                  context — content QA signal.
+                </p>
+                <div className="space-y-1">
+                  {report.toughest_objectives.map((o) => (
+                    <div
+                      key={o.objective_id}
+                      className="flex items-center justify-between text-sm"
+                    >
+                      <span className="font-mono text-xs">{o.objective_id}</span>
+                      <span className="text-xs">
+                        <span className="text-destructive font-bold">
+                          {o.rejected} rejected
+                        </span>
+                        <span className="text-muted-foreground">
+                          {" "}
+                          · {o.verified} verified
+                        </span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
 
             {/* Starts by source */}
             <section className="bg-card border rounded-xl p-4">

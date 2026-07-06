@@ -39,6 +39,7 @@ async function logVerdictEvent(
   verified: boolean,
   questId: string,
   objectiveId: string,
+  country: string | null,
 ) {
   try {
     if (typeof anonId !== "string" || !UUID_RE.test(anonId)) return;
@@ -52,6 +53,9 @@ async function logVerdictEvent(
       p_src: null,
       p_quest_id: questId,
       p_objective_id: objectiveId,
+      p_country: country,
+      p_device: null,
+      p_referrer: null,
     });
   } catch {
     // analytics must never break verification
@@ -125,6 +129,7 @@ export async function POST(request: NextRequest) {
         result.verified,
         ctx.questId,
         body.objectiveId,
+        request.headers.get("x-vercel-ip-country"),
       );
     }
     return NextResponse.json(result);

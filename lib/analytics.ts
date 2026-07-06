@@ -1,10 +1,9 @@
 "use client";
 
-import { createClient } from "@/lib/supabase/client";
-
 /**
- * First-party analytics: anonymous session id + first-touch source,
- * events written through the validated log_event() Postgres function.
+ * First-party analytics: anonymous session id + first-touch source.
+ * Events POST to /api/events, which enriches them (country, device)
+ * before writing through the validated log_event() Postgres function.
  * Everything here is fire-and-forget — analytics must never break play.
  */
 
@@ -12,10 +11,16 @@ const ANON_KEY = "sqp_anon_id";
 const SRC_KEY = "sqp_src";
 
 export type AnalyticsEvent =
+  | "session_start"
   | "quest_start"
   | "objective_complete"
   | "share"
   | "signup";
+
+/** YYYY-MM-DD key used to fire session_start at most once per day. */
+export function dayKey(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
 
 /** First touch wins: an already-stored source never gets overwritten. */
 export function resolveFirstTouchSrc(
@@ -77,24 +82,28 @@ export function once(key: string, scope: "session" | "forever" = "session"): boo
 
 export function trackEvent(
   event: AnalyticsEvent,
-  opts: { questId?: string; objectiveId?: string } = {},
+  opts: { questId?: string; objectiveId?: string; referrer?: string } = {},
 ) {
   if (typeof window === "undefined") return;
   const anonId = getAnonId();
   if (!anonId) return;
-  const supabase = createClient();
-  if (!supabase) return;
 
-  supabase
-    .rpc("log_event", {
-      p_anon_id: anonId,
-      p_event: event,
-      p_src: getSrc(),
-      p_quest_id: opts.questId ?? null,
-      p_objective_id: opts.objectiveId ?? null,
-    })
-    .then(
-      () => {},
-      () => {},
-    );
+  try {
+    fetch("/api/events", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      // keepalive lets share/complete events survive page navigation
+      keepalive: true,
+      body: JSON.stringify({
+        anonId,
+        event,
+        src: getSrc(),
+        questId: opts.questId,
+        objectiveId: opts.objectiveId,
+        referrer: opts.referrer,
+      }),
+    }).catch(() => {});
+  } catch {
+    // never break play
+  }
 }
