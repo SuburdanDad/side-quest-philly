@@ -4,6 +4,7 @@ import { Analytics } from "@vercel/analytics/next";
 import { AuthProvider } from "@/components/auth/auth-provider";
 import { AchievementToastContainer } from "@/components/gamification/achievement-toast";
 import { AnalyticsBoot } from "@/components/analytics-boot";
+import { AuthCodeCatcher } from "@/components/auth-code-catcher";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -67,6 +68,7 @@ export default function RootLayout({
         <AuthProvider>
           <AchievementToastContainer />
           <AnalyticsBoot />
+          <AuthCodeCatcher />
           {children}
         </AuthProvider>
         <Analytics />
