@@ -46,8 +46,10 @@ export async function POST(request: NextRequest) {
     const country = request.headers.get("x-vercel-ip-country");
     const device = classifyDevice(request.headers.get("user-agent"));
 
-    const supabase = createSupabaseClient(url, key);
-    await supabase.rpc("log_event", {
+    // Forwarded session token (if any) lets auth.uid() resolve inside
+    // log_event, attaching user_id — the visitor↔email link.
+    const authHeader = request.headers.get("authorization");
+    const rpcArgs = {
       p_anon_id: body.anonId,
       p_event: body.event,
       p_src: typeof body.src === "string" ? body.src.slice(0, 64) : null,
@@ -63,7 +65,21 @@ export async function POST(request: NextRequest) {
         body.event === "session_start" && typeof body.referrer === "string"
           ? body.referrer.slice(0, 256)
           : null,
+    };
+
+    const supabase = createSupabaseClient(url, key, {
+      global: authHeader
+        ? { headers: { Authorization: authHeader } }
+        : undefined,
     });
+    const { error } = await supabase.rpc("log_event", rpcArgs);
+
+    // An expired/garbage session token gets rejected outright — retry
+    // anonymously so the event degrades instead of disappearing.
+    if (error && authHeader) {
+      const anonClient = createSupabaseClient(url, key);
+      await anonClient.rpc("log_event", rpcArgs);
+    }
 
     return new NextResponse(null, { status: 204 });
   } catch (error) {

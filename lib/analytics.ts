@@ -1,5 +1,7 @@
 "use client";
 
+import { createClient } from "@/lib/supabase/client";
+
 /**
  * First-party analytics: anonymous session id + first-touch source.
  * Events POST to /api/events, which enriches them (country, device)
@@ -88,22 +90,36 @@ export function trackEvent(
   const anonId = getAnonId();
   if (!anonId) return;
 
-  try {
-    fetch("/api/events", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      // keepalive lets share/complete events survive page navigation
-      keepalive: true,
-      body: JSON.stringify({
-        anonId,
-        event,
-        src: getSrc(),
-        questId: opts.questId,
-        objectiveId: opts.objectiveId,
-        referrer: opts.referrer,
-      }),
-    }).catch(() => {});
-  } catch {
-    // never break play
-  }
+  void (async () => {
+    try {
+      // Forward the session token (when signed in) so the event row
+      // records user_id — this is what links visitors to emails.
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      const supabase = createClient();
+      if (supabase) {
+        const { data } = await supabase.auth.getSession();
+        const token = data.session?.access_token;
+        if (token) headers.Authorization = `Bearer ${token}`;
+      }
+
+      await fetch("/api/events", {
+        method: "POST",
+        headers,
+        // keepalive lets share/complete events survive page navigation
+        keepalive: true,
+        body: JSON.stringify({
+          anonId,
+          event,
+          src: getSrc(),
+          questId: opts.questId,
+          objectiveId: opts.objectiveId,
+          referrer: opts.referrer,
+        }),
+      });
+    } catch {
+      // never break play
+    }
+  })();
 }
