@@ -1,14 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useSyncExternalStore } from "react";
-import { useAuth } from "@/components/auth/auth-provider";
-import { createClient } from "@/lib/supabase/client";
-import { syncAllPhotosToCloud } from "@/lib/photos/sync";
+import { useCallback, useSyncExternalStore } from "react";
 
 const STORAGE_KEY = "sqp_photos";
-
-// One bulk upload per user per page load, even with many hook instances.
-const cloudSyncedUsers = new Set<string>();
 
 export type PhotoEntry = {
   dataUrl: string;
@@ -93,8 +87,10 @@ function getSnapshot() {
   return cachedPhotos;
 }
 
+const EMPTY_STORE: PhotoStore = {};
+
 function getServerSnapshot(): PhotoStore {
-  return {};
+  return EMPTY_STORE;
 }
 
 /**
@@ -147,19 +143,6 @@ export function usePhotoStorage() {
     getSnapshot,
     getServerSnapshot,
   );
-  const { user } = useAuth();
-
-  // On login, push local photos up so the leaderboard counts them.
-  useEffect(() => {
-    if (!user || cloudSyncedUsers.has(user.id)) return;
-    cloudSyncedUsers.add(user.id);
-    const supabase = createClient();
-    if (!supabase) return;
-    const stored = getStoredPhotos();
-    if (Object.keys(stored).length === 0) return;
-    syncAllPhotosToCloud(supabase, user.id, stored);
-  }, [user]);
-
   const savePhoto = useCallback(
     async (objectiveId: string, file: File): Promise<PhotoEntry> => {
       const dataUrl = await compressImage(file);

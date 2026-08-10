@@ -2,6 +2,31 @@
 
 All notable changes to Side Quest Philadelphia will be documented in this file.
 
+## [0.2.0.0] - 2026-08-10
+
+Portfolio mode: zero-infrastructure conversion. The game is now fully
+self-contained — no database, no accounts, no env vars, nothing to maintain.
+
+### Removed
+- Supabase entirely: auth (magic links), cloud progress/photo sync, first-party
+  analytics pipeline, admin dashboards (`/admin/funnel`, `/admin/visitors`),
+  `/login`, feedback + suggestion inboxes, keepalive cron
+- `@supabase/ssr` and `@supabase/supabase-js` dependencies
+
+### Changed
+- Leaderboard reimagined: you now rank against the City Legends (Ben Franklin,
+  Betsy Ross, Rocky...) using your local XP — no sign-in gate
+- Custom analytics events (`session_start`, `quest_start`, `objective_complete`,
+  `share`, `photo_verified`/`photo_rejected`) now go to Vercel Web Analytics;
+  first-touch ?src= attribution preserved
+- `/suggestions` is a season-wrap thank-you page pointing to @SideQuestPhilly
+- AI photo verification unchanged — server-side judge via AI Gateway (OIDC),
+  verdict event still emitted server-side only
+
+### Fixed
+- `getServerSnapshot` returning a fresh object per call in the photo store
+  (React hydration warning in dev)
+
 ## [0.1.1.0] - 2026-06-08
 
 ### Added

@@ -2,14 +2,20 @@
 
 Neighborhood scavenger hunt app for Philadelphia, tied to summer 2026 (FIFA World Cup + MLB All-Star Game).
 
+**PORTFOLIO MODE (since 2026-08-10):** the Supabase backend (auth, cloud sync,
+Postgres analytics, admin dashboards) is fully removed. Zero infrastructure, zero
+env vars; all game state is localStorage. Do not re-introduce a database or
+accounts without explicit direction. Season-era DB snapshot lives in
+`~/General Queries/supabase-backups/2026-08-10/side-quest-philadelphia.json`.
+
 ## Stack
 
 - Next.js 16 (App Router) + TypeScript
 - Tailwind CSS v4 + shadcn/ui (base-nova style)
 - canvas-confetti for celebrations
-- Supabase Auth (magic link) + Postgres with RLS + Storage (`quest-photos` bucket)
-- localStorage for guest progress, Supabase sync on auth
+- localStorage for ALL state (progress, photos, XP, achievements) — no accounts
 - AI SDK v6 via Vercel AI Gateway (`anthropic/claude-haiku-4.5`) for photo verification
+- Vercel Web Analytics for custom events
 
 ## Structure
 
@@ -22,19 +28,15 @@ Neighborhood scavenger hunt app for Philadelphia, tied to summer 2026 (FIFA Worl
 - `scripts/gen-chapter-sql.ts` — generates wave migrations FROM chapters.ts (never hand-write rows)
 - `lib/data/events.ts` — Summer 2026 event info
 - `lib/hooks/use-quest-progress.ts` — localStorage hook with useSyncExternalStore
-- `lib/hooks/use-photo-storage.ts` — photo proof store (PhotoEntry: dataUrl/verified/reason) + cloud sync on login
+- `lib/hooks/use-photo-storage.ts` — photo proof store (PhotoEntry: dataUrl/verified/reason)
 - `lib/photos/verification.ts` — pure AI-judge helpers (prompts, schema, clamping)
-- `lib/photos/sync.ts` — Supabase Storage upload + user_progress photo columns
-- `app/api/verify-photo/` — AI vision judge (graceful no-op without gateway creds); emits photo_verified/photo_rejected events server-side
+- `app/api/verify-photo/` — AI vision judge (graceful no-op without gateway creds); emits photo_verified/photo_rejected events server-side via @vercel/analytics/server
 - `app/api/share-card/` — 1080x1920 IG Stories card (next/og)
-- `app/leaderboard/` — email-gated City Legends board (get_leaderboard RPC)
-- `lib/analytics.ts` — first-party events: anon id, first-touch ?src=, daily session_start; POSTs to /api/events
-- `app/api/events/` — event ingestion + enrichment (country via x-vercel-ip-country, device via lib/device.ts); verdict events NOT accepted here (verify route only)
-- `app/admin/visitors/` — per-visitor histories (first/last seen, source, country, activity, email) + CSV export
+- `app/leaderboard/` — City Legends board: local XP ranked against fixed legend rows (no accounts)
+- `lib/analytics.ts` — custom events (anon id, first-touch ?src=, daily session_start) → Vercel Web Analytics track()
 - `app/q/[slug]/` — QR deep links (307 → quest with src=qr-{slug})
 - `app/posters/` — printable QR posters (master + 9 neighborhoods)
-- `app/admin/funnel/` — admin-only launch dashboard (get_funnel_stats / get_recent_feedback RPCs, gated by admin_emails table)
-- `components/feedback-button.tsx` — "Tell us what you think" → submit_feedback RPC
+- `app/suggestions/` — static season-wrap page (form retired)
 - `app/page.tsx` — Landing page (hero, events, neighborhood grid, ultimate CTA)
 - `app/quest/[slug]/` — Individual neighborhood quest pages
 - `app/ultimate/` — City-wide 10-objective ultimate quest
@@ -42,9 +44,8 @@ Neighborhood scavenger hunt app for Philadelphia, tied to summer 2026 (FIFA Worl
 ## Game economy (keep in sync!)
 
 - XP: history 10 / culture 15 / entertainment 20 / food-beverage 25, **+5 per AI-verified photo**
-- Client: `calculateTotalXP` in `lib/gamification/xp.ts` over ALL_OBJECTIVES (98)
-- Server: `get_leaderboard()` Postgres fn mirrors the same formula — change both or neither
-- **Stamps = core 45 only.** Client: NEIGHBORHOODS.objectives. Server: `quests.counts_for_stamp`. Chapters/secret quests NEVER mint stamps.
+- `calculateTotalXP` in `lib/gamification/xp.ts` over ALL_OBJECTIVES (98) is the single formula (no server mirror anymore)
+- **Stamps = core 45 only** (NEIGHBORHOODS.objectives). Chapters/secret quests NEVER mint stamps.
 - Milestone achievements (halfway-hero, completionist) count CORE completions only
 - Photo achievements: shutterbug (5 verified), photo-journalist (15), city-documentarian (30)
 
@@ -52,10 +53,9 @@ Neighborhood scavenger hunt app for Philadelphia, tied to summer 2026 (FIFA Worl
 
 1. Write objectives in `lib/data/chapters.ts` (new CHAPTER_III map; ids `{prefix}3-NN`, never reuse)
 2. Wire into `all-objectives.ts` (ALL_OBJECTIVES + LOOKUP with quest context)
-3. `npx -y tsx scripts/gen-chapter-sql.ts > /tmp/wave.sql` — apply as a migration with
-   the quests rows set `counts_for_stamp = false`
-4. Render where appropriate (quest page section like ChapterTwoSection)
-5. Update test/chapters.test.ts totals; run suite; ship. No leaderboard changes ever needed.
+3. Render where appropriate (quest page section like ChapterTwoSection)
+4. Update test/chapters.test.ts totals; run suite; ship. No leaderboard changes ever needed.
+   (scripts/gen-chapter-sql.ts is a season-era relic — no DB to migrate anymore)
 
 ## Dev
 
@@ -65,8 +65,8 @@ npm run dev  # runs on port 3003
 
 ## Key Decisions
 
-- Curated quest data is static TypeScript constants; the DB mirrors it (quests/objectives tables) for sync FKs, leaderboard XP, and analytics
-- Analytics/feedback have NO direct table access — everything goes through validated SECURITY DEFINER RPCs (log_event, submit_feedback, get_funnel_stats); zero new env vars
+- Curated quest data is static TypeScript constants — the only source of truth
+- Verification verdict events are emitted server-side only (verify-photo route) so clients can't forge photo_verified
 - Progress stored in localStorage under key `sqp_progress`
 - `useSyncExternalStore` for SSR-safe localStorage reads
 - `generateStaticParams` pre-renders all 6 quest pages

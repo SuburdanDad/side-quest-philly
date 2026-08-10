@@ -16,10 +16,7 @@ import { trackEvent } from "@/lib/analytics";
 import { useQuestProgress } from "@/lib/hooks/use-quest-progress";
 import { useGamification } from "@/lib/hooks/use-gamification";
 import { usePhotoStorage } from "@/lib/hooks/use-photo-storage";
-import { useAuth } from "@/components/auth/auth-provider";
-import { createClient } from "@/lib/supabase/client";
 import { requestPhotoVerification } from "@/lib/photos/verify-client";
-import { syncPhotoToCloud, removeCloudPhoto } from "@/lib/photos/sync";
 import { NEIGHBORHOODS } from "@/lib/data/neighborhoods";
 import { CATEGORY_XP, VERIFIED_PHOTO_XP } from "@/lib/gamification/xp";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -44,7 +41,6 @@ export function ObjectiveItem({
     useGamification();
   const { savePhoto, setVerification, getPhoto, removePhoto, verifiedCount } =
     usePhotoStorage();
-  const { user } = useAuth();
   const [expanded, setExpanded] = useState(false);
   const [showHint, setShowHint] = useState(false);
   const [xpFlash, setXpFlash] = useState(false);
@@ -110,30 +106,6 @@ export function ObjectiveItem({
             setTimeout(() => setBonusFlash(false), 2200);
             recordVerification(progress, verifiedCount + 1);
           }
-
-          // Push photo + verdict to the cloud for the leaderboard
-          if (user) {
-            const supabase = createClient();
-            if (supabase) {
-              syncPhotoToCloud(supabase, user.id, objective.id, {
-                dataUrl,
-                verified: result.verified,
-                reason: result.reason,
-                savedAt: new Date().toISOString(),
-              });
-            }
-          }
-        } else if (user) {
-          // Verification unavailable — still store the photo itself
-          const supabase = createClient();
-          if (supabase) {
-            syncPhotoToCloud(supabase, user.id, objective.id, {
-              dataUrl,
-              verified: null,
-              reason: null,
-              savedAt: new Date().toISOString(),
-            });
-          }
         }
       } finally {
         setVerifying(false);
@@ -145,7 +117,6 @@ export function ObjectiveItem({
       recordVerification,
       progress,
       verifiedCount,
-      user,
     ],
   );
 
@@ -156,14 +127,10 @@ export function ObjectiveItem({
       return;
     }
 
-    // Un-completing: clear local + cloud photo state
+    // Un-completing: clear local photo state
     toggleObjective(objective.id);
     removeObjectiveCompletion(objective.id);
     removePhoto(objective.id);
-    if (user) {
-      const supabase = createClient();
-      if (supabase) removeCloudPhoto(supabase, user.id, objective.id);
-    }
   }
 
   const handlePhotoCaptured = useCallback(

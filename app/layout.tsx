@@ -1,10 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, DM_Sans, Instrument_Serif } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
-import { AuthProvider } from "@/components/auth/auth-provider";
 import { AchievementToastContainer } from "@/components/gamification/achievement-toast";
 import { AnalyticsBoot } from "@/components/analytics-boot";
-import { AuthCodeCatcher } from "@/components/auth-code-catcher";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -65,12 +63,9 @@ export default function RootLayout({
         <meta name="theme-color" content="#0F1D36" />
       </head>
       <body className="min-h-full flex flex-col">
-        <AuthProvider>
-          <AchievementToastContainer />
-          <AnalyticsBoot />
-          <AuthCodeCatcher />
-          {children}
-        </AuthProvider>
+        <AchievementToastContainer />
+        <AnalyticsBoot />
+        {children}
         <Analytics />
       </body>
     </html>

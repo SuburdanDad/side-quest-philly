@@ -1,14 +1,11 @@
 "use client";
 
-import Link from "next/link";
-import { User, LogOut, Star } from "lucide-react";
+import { Star } from "lucide-react";
 import { useQuestProgress } from "@/lib/hooks/use-quest-progress";
-import { useAuth } from "@/components/auth/auth-provider";
 
 export function Hero() {
   const { getOverallProgress } = useQuestProgress();
   const { done, total } = getOverallProgress();
-  const { user, signOut } = useAuth();
 
   return (
     <section className="relative overflow-hidden text-white">
@@ -34,28 +31,6 @@ export function Hero() {
           <div className="flex-1 bg-white" />
           <div className="flex-1 bg-[#B22234]" />
         </div>
-      </div>
-
-      {/* Auth corner */}
-      <div className="absolute top-4 right-3 z-10">
-        {user ? (
-          <button
-            onClick={() => signOut()}
-            className="inline-flex items-center gap-1.5 text-[11px] text-white/60 hover:text-white transition-colors px-3 py-2.5 min-h-[44px]"
-          >
-            <User className="h-3.5 w-3.5" />
-            {user.email?.split("@")[0]}
-            <LogOut className="h-3 w-3" />
-          </button>
-        ) : (
-          <Link
-            href="/login"
-            className="inline-flex items-center gap-1.5 text-[11px] text-white/60 hover:text-white transition-colors px-3 py-2.5 min-h-[44px]"
-          >
-            <User className="h-3.5 w-3.5" />
-            Sign in
-          </Link>
-        )}
       </div>
 
       <div className="relative mx-auto max-w-lg px-5 pt-14 sm:pt-20 pb-8 text-center flex flex-col items-center">

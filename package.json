@@ -12,8 +12,6 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
-    "@supabase/ssr": "^0.10.3",
-    "@supabase/supabase-js": "^2.107.0",
     "@vercel/analytics": "^2.0.1",
     "ai": "^6.0.199",
     "canvas-confetti": "^1.9.4",

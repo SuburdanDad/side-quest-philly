@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { generateText, Output, jsonSchema } from "ai";
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { track } from "@vercel/analytics/server";
 import { findObjective } from "@/lib/data/all-objectives";
 import {
   UNAVAILABLE,
@@ -26,36 +26,22 @@ function gatewayConfigured(): boolean {
   );
 }
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 /**
- * The billable/analytics event for a verification verdict is emitted
- * HERE, server-side — the client cannot post photo_verified. Verdict
- * and event share one codepath.
+ * The analytics event for a verification verdict is emitted HERE,
+ * server-side — the client cannot post photo_verified. Verdict and
+ * event share one codepath. Goes to Vercel Web Analytics.
  */
 async function logVerdictEvent(
-  anonId: unknown,
   verified: boolean,
   questId: string,
   objectiveId: string,
   country: string | null,
 ) {
   try {
-    if (typeof anonId !== "string" || !UUID_RE.test(anonId)) return;
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    if (!url || !key) return;
-    const supabase = createSupabaseClient(url, key);
-    await supabase.rpc("log_event", {
-      p_anon_id: anonId,
-      p_event: verified ? "photo_verified" : "photo_rejected",
-      p_src: null,
-      p_quest_id: questId,
-      p_objective_id: objectiveId,
-      p_country: country,
-      p_device: null,
-      p_referrer: null,
+    await track(verified ? "photo_verified" : "photo_rejected", {
+      questId,
+      objectiveId,
+      country,
     });
   } catch {
     // analytics must never break verification
@@ -125,7 +111,6 @@ export async function POST(request: NextRequest) {
     const result = toVerificationResult(output);
     if (typeof result.verified === "boolean") {
       await logVerdictEvent(
-        body.anonId,
         result.verified,
         ctx.questId,
         body.objectiveId,

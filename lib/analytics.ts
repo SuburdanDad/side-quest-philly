@@ -1,12 +1,13 @@
 "use client";
 
-import { createClient } from "@/lib/supabase/client";
+import { track } from "@vercel/analytics";
 
 /**
- * First-party analytics: anonymous session id + first-touch source.
- * Events POST to /api/events, which enriches them (country, device)
- * before writing through the validated log_event() Postgres function.
- * Everything here is fire-and-forget — analytics must never break play.
+ * Portfolio-mode analytics: custom events go to Vercel Web Analytics
+ * (no backend of our own). First-touch ?src= attribution and the
+ * once-per-day session logic are preserved from the original
+ * first-party pipeline. Everything here is fire-and-forget —
+ * analytics must never break play.
  */
 
 const ANON_KEY = "sqp_anon_id";
@@ -16,8 +17,7 @@ export type AnalyticsEvent =
   | "session_start"
   | "quest_start"
   | "objective_complete"
-  | "share"
-  | "signup";
+  | "share";
 
 /** YYYY-MM-DD key used to fire session_start at most once per day. */
 export function dayKey(date: Date): string {
@@ -87,39 +87,14 @@ export function trackEvent(
   opts: { questId?: string; objectiveId?: string; referrer?: string } = {},
 ) {
   if (typeof window === "undefined") return;
-  const anonId = getAnonId();
-  if (!anonId) return;
-
-  void (async () => {
-    try {
-      // Forward the session token (when signed in) so the event row
-      // records user_id — this is what links visitors to emails.
-      const headers: Record<string, string> = {
-        "Content-Type": "application/json",
-      };
-      const supabase = createClient();
-      if (supabase) {
-        const { data } = await supabase.auth.getSession();
-        const token = data.session?.access_token;
-        if (token) headers.Authorization = `Bearer ${token}`;
-      }
-
-      await fetch("/api/events", {
-        method: "POST",
-        headers,
-        // keepalive lets share/complete events survive page navigation
-        keepalive: true,
-        body: JSON.stringify({
-          anonId,
-          event,
-          src: getSrc(),
-          questId: opts.questId,
-          objectiveId: opts.objectiveId,
-          referrer: opts.referrer,
-        }),
-      });
-    } catch {
-      // never break play
-    }
-  })();
+  try {
+    track(event, {
+      src: getSrc(),
+      questId: opts.questId ?? null,
+      objectiveId: opts.objectiveId ?? null,
+      referrer: event === "session_start" ? (opts.referrer ?? null) : null,
+    });
+  } catch {
+    // never break play
+  }
 }

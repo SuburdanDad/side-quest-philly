@@ -1,12 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 import type { QuestProgress } from "@/lib/types";
 import { NEIGHBORHOODS } from "@/lib/data/neighborhoods";
 import { ALL_OBJECTIVES } from "@/lib/data/all-objectives";
 import { ULTIMATE_QUEST_IDS } from "@/lib/data/quests";
-import { useAuth } from "@/components/auth/auth-provider";
-import { createClient } from "@/lib/supabase/client";
 
 const STORAGE_KEY = "sqp_progress";
 
@@ -74,93 +72,25 @@ export function useQuestProgress() {
     getSnapshot,
     getServerSnapshot,
   );
-  const { user } = useAuth();
-  const syncedRef = useRef(false);
 
-  useEffect(() => {
-    if (!user || syncedRef.current) return;
-    syncedRef.current = true;
+  const toggleObjective = useCallback((id: string) => {
+    const current = getStoredProgress();
+    const completed = current.completedObjectives.includes(id)
+      ? current.completedObjectives.filter((o) => o !== id)
+      : [...current.completedObjectives, id];
 
-    const supabase = createClient();
-    if (!supabase) return;
+    const { completedNeighborhoods, ultimateCompleted } =
+      computeDerived(completed);
 
-    supabase
-      .from("user_progress")
-      .select("objective_id")
-      .eq("user_id", user.id)
-      .then(({ data }) => {
-        if (!data) return;
-
-        const remoteIds = data.map((r) => r.objective_id);
-        const localIds = getStoredProgress().completedObjectives;
-        const merged = [...new Set([...localIds, ...remoteIds])];
-
-        if (merged.length === localIds.length && merged.length === remoteIds.length) return;
-
-        const newToRemote = merged.filter((id) => !remoteIds.includes(id));
-        if (newToRemote.length > 0) {
-          const rows = newToRemote.map((id) => ({
-            user_id: user.id,
-            objective_id: id,
-          }));
-          supabase.from("user_progress").upsert(rows, { onConflict: "user_id,objective_id" }).then(() => {});
-        }
-
-        const { completedNeighborhoods, ultimateCompleted } = computeDerived(merged);
-        const now = new Date().toISOString();
-        setStoredProgress({
-          completedObjectives: merged,
-          completedNeighborhoods,
-          ultimateCompleted,
-          firstVisit: getStoredProgress().firstVisit || now,
-          lastActivity: now,
-        });
-      });
-  }, [user]);
-
-  const toggleObjective = useCallback(
-    (id: string) => {
-      const current = getStoredProgress();
-      const completed = current.completedObjectives.includes(id)
-        ? current.completedObjectives.filter((o) => o !== id)
-        : [...current.completedObjectives, id];
-
-      const { completedNeighborhoods, ultimateCompleted } =
-        computeDerived(completed);
-
-      const now = new Date().toISOString();
-      setStoredProgress({
-        completedObjectives: completed,
-        completedNeighborhoods,
-        ultimateCompleted,
-        firstVisit: current.firstVisit || now,
-        lastActivity: now,
-      });
-
-      if (user) {
-        const supabase = createClient();
-        if (supabase) {
-          if (completed.includes(id)) {
-            supabase
-              .from("user_progress")
-              .upsert(
-                { user_id: user.id, objective_id: id },
-                { onConflict: "user_id,objective_id" },
-              )
-              .then(() => {});
-          } else {
-            supabase
-              .from("user_progress")
-              .delete()
-              .eq("user_id", user.id)
-              .eq("objective_id", id)
-              .then(() => {});
-          }
-        }
-      }
-    },
-    [user],
-  );
+    const now = new Date().toISOString();
+    setStoredProgress({
+      completedObjectives: completed,
+      completedNeighborhoods,
+      ultimateCompleted,
+      firstVisit: current.firstVisit || now,
+      lastActivity: now,
+    });
+  }, []);
 
   const isCompleted = useCallback(
     (id: string) => progress.completedObjectives.includes(id),
@@ -190,17 +120,7 @@ export function useQuestProgress() {
 
   const resetAll = useCallback(() => {
     setStoredProgress({ ...DEFAULT_PROGRESS });
-    if (user) {
-      const supabase = createClient();
-      if (supabase) {
-        supabase
-          .from("user_progress")
-          .delete()
-          .eq("user_id", user.id)
-          .then(() => {});
-      }
-    }
-  }, [user]);
+  }, []);
 
   return {
     progress,
