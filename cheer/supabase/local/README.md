@@ -22,3 +22,16 @@ The DB test suite can also target this real image:
 Everything here is **local-only**: the JWT secret and keys are public dev values.
 Production keys come from the Supabase dashboard (see `docs/meet-day-runbook.md`).
 Realtime, Storage and Studio are intentionally left out (Judgey v1 polls).
+
+## Live end-to-end test
+
+```bash
+supabase/local/up.sh
+npm run build && npx next start -p 3024     # build after .env.local exists
+npm run test:e2e:live                       # 3 browser phones + 12 scripted voters
+```
+
+It resets an `e2e-practice` meet (demo roster, first routine 6 minutes ago) and
+checks the whole loop: local-first check-in, crowd confirmation, vote, own-team
+block, server-side rule enforcement against direct API calls, operator mode,
+division reveal and offline behaviour.

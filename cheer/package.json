@@ -16,7 +16,8 @@
     "typecheck": "tsc --noEmit",
     "typecheck:domain": "tsc --noEmit -p tsconfig.domain.json",
     "test:db": "node --experimental-strip-types --no-warnings --test test/db/*.test.ts",
-    "import:meet": "node --experimental-strip-types --no-warnings scripts/import-meet.ts"
+    "import:meet": "node --experimental-strip-types --no-warnings scripts/import-meet.ts",
+    "test:e2e:live": "node test/e2e/live.e2e.mjs"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
