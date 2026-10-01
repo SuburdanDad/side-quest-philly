@@ -1,10 +1,10 @@
-# Office Hours: Cheer Ecosystem ("Mat Time", working name)
+# Office Hours: Cheer Ecosystem (Judgey)
 
 **Date:** 2026-10-01 · **Status:** design approved for v1 · **Test target:** a real meet ~2 months out (early Dec 2026)
 
 ## The pitch in one line
 
-Cheer meets are 8+ hour days for a 2.5-minute routine. Mat Time tells every
+Cheer meets are 8+ hour days for a 2.5-minute routine. Judgey tells every
 parent exactly when their team goes on, and turns the hours in between into a
 fun, positive crowd experience.
 

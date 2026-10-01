@@ -40,7 +40,7 @@ accounts without explicit direction. Season-era DB snapshot lives in
 - `app/page.tsx` — Landing page (hero, events, neighborhood grid, ultimate CTA)
 - `app/quest/[slug]/` — Individual neighborhood quest pages
 - `app/ultimate/` — City-wide 10-objective ultimate quest
-- `cheer/` — SEPARATE project (Mat Time cheer app), own package.json, excluded from root tooling; temporary home until it moves to its own repo. See `cheer/README.md`
+- `cheer/` — SEPARATE project (Judgey cheer app), own package.json, excluded from root tooling; temporary home until it moves to its own repo. See `cheer/README.md`
 
 ## Game economy (keep in sync!)
 

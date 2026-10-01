@@ -7,6 +7,13 @@ import { AWARDS, type Award, type Ballot, type FanProfile, type Minutes, type Ti
 
 const MINUTE = 60_000;
 
+export const AWARD_LABELS: Record<Award, string> = {
+  stunts: "Best Stunts",
+  tumbling: "Best Tumbling",
+  spirit: "Most Spirit",
+  dance: "Best Dance",
+};
+
 export const OWN_TEAM_MESSAGE =
   "To keep it fair, you can't vote for your own team. We know you think they're perfect.";
 

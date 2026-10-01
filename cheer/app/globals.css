@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+/* Judgey tokens. See DESIGN.md. Dark-first in every theme (it's an arena). */
+@theme inline {
+  --color-ink: #0b0b14;
+  --color-surface: #161625;
+  --color-surface-2: #20203a;
+  --color-line: #2e2e4d;
+  --color-text: #f5f3ff;
+  --color-muted: #a3a1c2;
+  --color-bow: #ff3d8b;
+  --color-mat: #2ec4ff;
+  --color-gold: #ffc83d;
+  --color-go: #3ddc97;
+  --color-late: #ff8a3d;
+
+  --font-display: var(--font-anton), Impact, sans-serif;
+  --font-sans: var(--font-dm-sans), system-ui, sans-serif;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background: var(--color-ink);
+  color: var(--color-text);
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-tap-highlight-color: transparent;
+}
+
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-mat) 55%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 14px transparent;
+  }
+}
+
+.pulse-ring {
+  animation: pulse-ring 1.6s ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulse-ring {
+    animation: none;
+  }
+}

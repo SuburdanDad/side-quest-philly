@@ -11,6 +11,19 @@ export interface Team {
   division: string;
 }
 
+export interface Meet {
+  id: string;
+  name: string;
+  venue: string;
+  city: string;
+  /** IANA zone used for every displayed time. */
+  timeZone: string;
+  startsAt: Timestamp;
+  mats: string[];
+  teams: Team[];
+  slots: Slot[];
+}
+
 /** One routine on the published running order. */
 export interface Slot {
   teamId: string;
