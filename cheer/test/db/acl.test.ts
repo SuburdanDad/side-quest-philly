@@ -21,6 +21,7 @@ const TABLES: Record<string, string[]> = {
   "judgey_private.operator_codes": [],
   "judgey_private.meet_operators": [],
   "judgey_private.operator_attempts": [],
+  "judgey_private.operator_failures": [],
 };
 
 /** RPC → roles with EXECUTE, and its volatility. */

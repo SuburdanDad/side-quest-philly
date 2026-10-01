@@ -184,7 +184,8 @@ dbSuite("concurrency", (ctx) => {
     };
     try {
       await voteWhileHeld(user(), "tap_mat", { p_meet: meet.id, p_team: "t" }); // the anchor: more confirmations
-      await voteWhileHeld(op, "op_set_start", { p_meet: meet.id, p_team: "t", p_started_at_ms: meet.t0 - MINUTE });
+      // "Clear" (a start can't be replaced in place any more); the ballot still sees the committed start.
+      await voteWhileHeld(op, "op_set_start", { p_meet: meet.id, p_team: "t", p_started_at_ms: null });
     } finally {
       for (const { c } of [two, one]) {
         await c.query("rollback").catch(() => {});
@@ -219,5 +220,110 @@ dbSuite("concurrency", (ctx) => {
     assert.deepEqual(tallies, await talliesFromBallots(db, meet.id));
     assert.equal(tallies.find((t) => t.team_id === "t")!.votes, 24);
     assert.equal(tallies.find((t) => t.team_id === "u")!.votes, 12);
+  });
+});
+
+dbSuite("concurrency: one lock per mat (review fixes)", (ctx) => {
+  test("confirming taps on two different routines of one mat can't both confirm (too-soon holds)", async () => {
+    const { db } = ctx;
+    // r1 and r2 are the mat's two lookahead candidates; nothing on mat 1 has started.
+    const meet = await seedMeet(db, [
+      { team: "r1", at: -1 },
+      { team: "r2", at: 2 },
+      { team: "other", at: -1, mat: "2" },
+    ]);
+    for (const team of ["r1", "r2"]) {
+      assert.deepEqual(await db.rpc(user(), "tap_mat", { p_meet: meet.id, p_team: team }), { ok: true, confirmed: false });
+    }
+    const [one, two] = await pair(db);
+    try {
+      const first = await open(one.c, user(), "tap_mat", { p_meet: meet.id, p_team: "r1" });
+      assert.equal(first.confirmed, true);
+      const second = open(two.c, user(), "tap_mat", { p_meet: meet.id, p_team: "r2" });
+      await waitUntilBlocked(db, two.pid); // a different routine, so this is the per-mat lock
+      await one.c.query("commit");
+      assert.deepEqual(await second, { ok: false, reason: "too-soon", confirmed: false });
+      await two.c.query("commit");
+    } finally {
+      one.c.release();
+      two.c.release();
+    }
+    const rows = await db.sql("select team_id from public.routine_starts where meet_id = $1 order by 1", [meet.id]);
+    assert.deepEqual(rows, [{ team_id: "r1" }], "exactly one routine of the mat confirmed");
+  });
+
+  test("a tap in flight on one mat doesn't block taps on another mat", async () => {
+    const { db } = ctx;
+    const meet = await seedMeet(db, [
+      { team: "m1", at: -1, mat: "1" },
+      { team: "m2", at: -1, mat: "2" },
+    ]);
+    const [one, two] = await pair(db);
+    try {
+      assert.equal((await open(one.c, user(), "tap_mat", { p_meet: meet.id, p_team: "m1" })).ok, true);
+      await begin(two.c, user());
+      await two.c.query("set local lock_timeout = '2s'");
+      assert.equal((await callRpc(two.c, "tap_mat", { p_meet: meet.id, p_team: "m2" })).ok, true);
+      await two.c.query("commit");
+      await one.c.query("commit");
+    } finally {
+      for (const { c } of [two, one]) {
+        await c.query("rollback").catch(() => {});
+        c.release();
+      }
+    }
+  });
+
+  test("op_set_status during a re-import waits for it instead of deadlocking (meets row first)", async () => {
+    const { db } = ctx;
+    const code = "reimport-code";
+    const meet = await seedMeet(
+      db,
+      [
+        { team: "a", at: 5 },
+        { team: "b", at: 9 },
+      ],
+      { operatorCode: code },
+    );
+    const op = user();
+    assert.deepEqual(await db.rpc(op, "claim_operator", { p_meet: meet.id, p_code: code }), { ok: true });
+    const [importer, opConn] = await pair(db);
+    try {
+      // The importer's emitted SQL (scripts/import-meet-lib.ts emitSql): meets upsert first, then routines.
+      await importer.c.query("begin");
+      await importer.c.query(
+        `insert into public.meets (id, name, time_zone, starts_at, mats)
+         values ($1, 'Test Meet v2', 'America/New_York', judgey_private.from_ms($2), '{1}')
+         on conflict (id) do update set name = excluded.name, time_zone = excluded.time_zone,
+           starts_at = excluded.starts_at, mats = excluded.mats,
+           schedule_version = public.meets.schedule_version + 1`,
+        [meet.id, meet.t0],
+      );
+      const scratch = open(opConn.c, op, "op_set_status", { p_meet: meet.id, p_team: "a", p_status: "scratched" });
+      scratch.catch(() => {}); // awaited below
+      await waitUntilBlocked(db, opConn.pid); // on the meets row, holding no routine row
+      await importer.c.query("set local lock_timeout = '3s'");
+      await importer.c.query(
+        `insert into public.routines (meet_id, team_id, team_name, gym, division, mat, scheduled_at, status) values
+           ($1, 'a', 'A', 'Test Gym', 'Div', '1', judgey_private.from_ms($2), 'scheduled'),
+           ($1, 'b', 'B', 'Test Gym', 'Div', '1', judgey_private.from_ms($3), 'scheduled')
+         on conflict (meet_id, team_id) do update set
+           team_name = excluded.team_name, gym = excluded.gym, division = excluded.division,
+           mat = excluded.mat, scheduled_at = excluded.scheduled_at, status = excluded.status`,
+        [meet.id, meet.t0 + 6 * MINUTE, meet.t0 + 10 * MINUTE],
+      );
+      await importer.c.query("commit");
+      assert.deepEqual(await scratch, { ok: true });
+      await opConn.c.query("commit");
+    } finally {
+      for (const { c } of [importer, opConn]) {
+        await c.query("rollback").catch(() => {});
+        c.release();
+      }
+    }
+    const meetRow = await db.one("select schedule_version as v, name from public.meets where id = $1", [meet.id]);
+    assert.deepEqual(meetRow, { v: 3, name: "Test Meet v2" }, "both the import and the scratch bumped the version");
+    const a = await db.one("select status from public.routines where meet_id = $1 and team_id = 'a'", [meet.id]);
+    assert.equal(a.status, "scratched", "the scratch applied after the import");
   });
 });

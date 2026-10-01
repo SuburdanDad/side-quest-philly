@@ -1,10 +1,7 @@
-import type { Metadata } from "next";
-import { Vote } from "@/components/vote";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "Vote" };
-
-// Dynamic: live meets aren't known at build time, so the team is resolved on the client.
-export default async function VotePage({ params }: { params: Promise<{ teamId: string }> }) {
+// Old links (/meet/vote/<team>) keep working: voting lives at /meet/vote?team=<team>.
+export default async function LegacyVotePage({ params }: { params: Promise<{ teamId: string }> }) {
   const { teamId } = await params;
-  return <Vote teamId={teamId} />;
+  redirect(`/meet/vote?team=${encodeURIComponent(teamId)}`);
 }

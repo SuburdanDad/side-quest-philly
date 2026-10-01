@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Check, Clock, Hand, Heart, Loader2, WifiOff } from "lucide-react";
 import type { MatBoard, RoutineRow } from "@/src/board.ts";
-import { MINUTE } from "@/src/rules.ts";
 import { tapRejection } from "@/src/schedule.ts";
-import { driftLabel, driftTone, formatClock } from "@/src/format.ts";
+import { formatClock } from "@/src/format.ts";
+import { matChip, staleAnchorLabel } from "@/lib/eta-copy";
+import { voteHref } from "@/lib/links";
 import { TAP_MESSAGES } from "@/lib/live-core";
 import type { MeetView, OperatorActions } from "@/lib/meet-view";
 import { useMeet } from "@/lib/use-meet";
@@ -13,35 +15,58 @@ import { ButtonLink, Chip } from "./ui";
 
 /** The tap button ignores clicks this long after the up-next team changes (no double-taps onto the next team). */
 const TAP_GUARD_MS = 1500;
-/** Past this, the mat chip says when the last start was confirmed. */
-const STALE_ANCHOR_MS = 20 * MINUTE;
+/** An armed operator button ("Tap again to …") disarms itself after this. */
+const CONFIRM_MS = 4000;
 
-/** Drift chip, plus "last confirmed h:mm" once the newest confirmed start is getting old. */
+/** Drift chip ("Not started yet" before any confirmed start), plus "last confirmed h:mm" once it gets old. */
 export function MatStatus({ board, view }: { board: MatBoard; view: MeetView }) {
-  const stale = board.lastConfirmedAt !== undefined && view.now - board.lastConfirmedAt > STALE_ANCHOR_MS;
+  const chip = matChip(board);
+  const stale = staleAnchorLabel(board.lastConfirmedAt, view.now, view.meet.timeZone);
   return (
     <>
-      <Chip tone={driftTone(board.driftMinutes)}>{driftLabel(board.driftMinutes)}</Chip>
-      {stale && <Chip>Last confirmed {formatClock(board.lastConfirmedAt!, view.meet.timeZone)}</Chip>}
+      <Chip tone={chip.tone}>{chip.label}</Chip>
+      {stale && <Chip>{stale}</Chip>}
     </>
   );
 }
 
-export function Mats({ initialMat }: { initialMat?: string }) {
+/** /meet/mats?mat=<n>: the param is read on the client so the route stays static (and works offline). */
+export function Mats() {
+  const mat = useSearchParams().get("mat") ?? undefined;
+  return <MatsScreen key={mat ?? "default"} initialMat={mat} />;
+}
+
+function MatsScreen({ initialMat }: { initialMat?: string }) {
   const view = useMeet();
   const { boards, homeTeamIds } = view;
   const homeMat = boards.find((b) => b.rows.some((r) => homeTeamIds.includes(r.team.id)))?.mat;
   const [mat, setMat] = useState(initialMat ?? homeMat ?? boards[0]?.mat);
   const board = boards.find((b) => b.mat === mat) ?? boards[0];
 
-  // Keep the action (on the mat / up next) in view when switching mats.
-  const focusRef = useRef<HTMLLIElement>(null);
+  // On first open and on a mat switch only (never on a live update): bring the tap
+  // panel to the top, with the on-mat / up-next rows right under it.
+  const focusRef = useRef<HTMLDivElement>(null);
+  const firstScroll = useRef(true);
   useEffect(() => {
-    focusRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+    const el = focusRef.current;
+    if (!el) return;
+    const first = firstScroll.current;
+    firstScroll.current = false;
+    if (first && window.scrollY > 0) return; // the fan already scrolled (e.g. Back): leave it
+    el.scrollIntoView({ block: "start", behavior: first ? "auto" : "smooth" });
   }, [mat]);
 
   if (!board) return <p className="text-muted">No running order yet.</p>;
   const focusId = (board.onMat ?? board.upNext)?.team.id;
+  const split = focusId === undefined ? board.rows.length : board.rows.findIndex((r) => r.team.id === focusId);
+  const before = board.rows.slice(0, split);
+  const after = board.rows.slice(split);
+  const quick = new Set([board.upNext?.team.id, ...board.tapCandidates.map((r) => r.team.id)]);
+  const row = (r: RoutineRow) => (
+    <li key={r.team.id}>
+      <Row row={r} view={view} isUpNext={r.team.id === board.upNext?.team.id} quickStart={quick.has(r.team.id)} />
+    </li>
+  );
 
   return (
     <>
@@ -71,15 +96,15 @@ export function Mats({ initialMat }: { initialMat?: string }) {
       </div>
       <p className="mt-1 text-sm text-muted">Times update live as fans tap teams onto the mat.</p>
 
-      <TapPanel key={board.mat} board={board} view={view} />
-
-      <ol className="mt-4 space-y-2">
-        {board.rows.map((row) => (
-          <li key={row.team.id} ref={row.team.id === focusId ? focusRef : undefined} className="scroll-mt-24">
-            <Row row={row} view={view} isUpNext={row.team.id === board.upNext?.team.id} />
-          </li>
-        ))}
-      </ol>
+      {before.length > 0 && <ol className="mt-4 space-y-2">{before.map(row)}</ol>}
+      <div ref={focusRef} className="scroll-mt-20">
+        <TapPanel key={board.mat} board={board} view={view} />
+      </div>
+      {after.length > 0 && (
+        <ol start={before.length + 1} className="mt-2 space-y-2">
+          {after.map(row)}
+        </ol>
+      )}
     </>
   );
 }
@@ -174,7 +199,17 @@ function TapButton({
   );
 }
 
-function Row({ row, view, isUpNext }: { row: RoutineRow; view: MeetView; isUpNext: boolean }) {
+function Row({
+  row,
+  view,
+  isUpNext,
+  quickStart,
+}: {
+  row: RoutineRow;
+  view: MeetView;
+  isUpNext: boolean;
+  quickStart: boolean;
+}) {
   const { meet, homeTeamIds, myBallots, actions } = view;
   const { team, eta } = row;
   const mine = homeTeamIds.includes(team.id);
@@ -183,16 +218,24 @@ function Row({ row, view, isUpNext }: { row: RoutineRow; view: MeetView; isUpNex
   const onMat = eta.status === "on-mat";
   const scratched = eta.status === "scratched";
   const skipped = eta.status === "skipped";
+  // Finished rows step back by losing their card surface, never by fading the text (contrast stays >= 4.5:1).
+  const dimmed = (done && !row.votingOpen) || scratched;
 
   return (
     <div
       className={`rounded-2xl border p-3 ${
-        onMat ? "pulse-ring border-mat bg-mat/10" : mine ? "border-bow/50 bg-surface" : "border-line bg-surface"
-      } ${(done && !row.votingOpen) || scratched ? "opacity-55" : ""}`}
+        onMat
+          ? "pulse-ring border-mat bg-mat/10"
+          : dimmed
+            ? `${mine ? "border-bow/30" : "border-line/60"} bg-ink`
+            : mine
+              ? "border-bow/50 bg-surface"
+              : "border-line bg-surface"
+      }`}
     >
       <div className="flex items-center gap-3">
-        <div className="w-16 shrink-0 text-right tabular-nums">
-          <p className={`text-sm font-bold ${scratched ? "line-through" : ""}`}>
+        <div className="w-[4.75rem] shrink-0 text-right whitespace-nowrap tabular-nums">
+          <p className={`text-sm font-bold ${scratched ? "line-through" : ""} ${dimmed ? "text-muted" : ""}`}>
             {formatClock(eta.estimatedAt, meet.timeZone)}
           </p>
           {eta.driftMinutes !== 0 && (
@@ -200,7 +243,11 @@ function Row({ row, view, isUpNext }: { row: RoutineRow; view: MeetView; isUpNex
           )}
         </div>
         <div className="min-w-0 flex-1">
-          <p className={`flex items-center gap-1.5 truncate font-bold ${scratched ? "line-through" : ""}`}>
+          <p
+            className={`flex items-center gap-1.5 truncate font-bold ${scratched ? "line-through" : ""} ${
+              dimmed ? "text-muted" : ""
+            }`}
+          >
             {mine && <Heart size={14} className="shrink-0 fill-bow text-bow" aria-label="Your team" />}
             {team.name}
           </p>
@@ -221,54 +268,86 @@ function Row({ row, view, isUpNext }: { row: RoutineRow; view: MeetView; isUpNex
             ) : voted ? (
               <Chip tone="go">Voted</Chip>
             ) : (
-              <ButtonLink href={`/meet/vote/${team.id}`} className="h-12 px-4 text-sm">
+              <ButtonLink href={voteHref(team.id)} className="h-12 px-4 text-sm">
                 Vote
               </ButtonLink>
             ))}
         </div>
       </div>
-      {view.isOperator && actions.op && <OperatorControls row={row} op={actions.op} />}
+      {view.isOperator && actions.op && <OperatorControls row={row} op={actions.op} quickStart={quickStart} />}
     </div>
   );
 }
 
-/** Operator-only: fix any start in one tap. */
-function OperatorControls({ row, op }: { row: RoutineRow; op: OperatorActions }) {
-  const [busy, setBusy] = useState<string | null>(null);
+type OpAction = "start" | "clear" | "status";
+
+/**
+ * Operator-only fixes. "Start now" never overwrites a start (Clear first) and is
+ * one tap only for the up-next / tappable rows; Clear, Scratch and Unscratch
+ * (and Start now anywhere else) take a second "Tap again to …" within 4 s.
+ */
+function OperatorControls({ row, op, quickStart }: { row: RoutineRow; op: OperatorActions; quickStart: boolean }) {
+  const [busy, setBusy] = useState<OpAction | null>(null);
+  const [armed, setArmed] = useState<OpAction | null>(null);
   const [error, setError] = useState<string | null>(null);
   const id = row.team.id;
+  const name = row.team.name;
   const scratched = row.slot.status === "scratched";
+  const started = row.startedAt !== undefined;
 
-  const run = async (what: string, fn: () => Promise<string | null>) => {
+  useEffect(() => {
+    if (!armed) return;
+    const t = setTimeout(() => setArmed(null), CONFIRM_MS);
+    return () => clearTimeout(t);
+  }, [armed]);
+
+  const actions: Record<OpAction, { run: () => Promise<string | null>; confirm: string; needsConfirm: boolean }> = {
+    start: { run: () => op.start(id), confirm: `Tap again to start ${name} now`, needsConfirm: !quickStart },
+    clear: { run: () => op.clear(id), confirm: `Tap again to clear ${name}'s start`, needsConfirm: true },
+    status: {
+      run: () => op.setStatus(id, scratched ? "scheduled" : "scratched"),
+      confirm: `Tap again to ${scratched ? "unscratch" : "scratch"} ${name}`,
+      needsConfirm: true,
+    },
+  };
+
+  const run = async (what: OpAction) => {
+    setArmed(null);
     setBusy(what);
     setError(null);
-    setError(await fn());
+    setError(await actions[what].run());
     setBusy(null);
+  };
+  const press = (what: OpAction) => {
+    if (actions[what].needsConfirm && armed !== what) setArmed(what);
+    else void run(what);
   };
 
   const cls =
-    "flex h-12 items-center justify-center rounded-xl border border-gold/40 bg-gold/10 text-xs font-bold text-gold uppercase disabled:opacity-40";
+    "flex h-12 items-center justify-center rounded-xl border border-gold/40 bg-gold/10 px-2 text-xs font-bold text-gold uppercase disabled:opacity-40";
   return (
     <div className="mt-3">
-      <div className="grid grid-cols-3 gap-2">
-        <button className={cls} disabled={!!busy || scratched} onClick={() => run("start", () => op.start(id))}>
-          {busy === "start" ? "…" : "Start now"}
-        </button>
+      {armed ? (
         <button
-          className={cls}
-          disabled={!!busy || row.startedAt === undefined}
-          onClick={() => run("clear", () => op.clear(id))}
+          className="flex h-12 w-full items-center justify-center rounded-xl bg-gold px-2 text-xs font-bold text-ink uppercase"
+          onClick={() => press(armed)}
+          aria-live="polite"
         >
-          {busy === "clear" ? "…" : "Clear"}
+          {actions[armed].confirm}
         </button>
-        <button
-          className={cls}
-          disabled={!!busy}
-          onClick={() => run("status", () => op.setStatus(id, scratched ? "scheduled" : "scratched"))}
-        >
-          {busy === "status" ? "…" : scratched ? "Unscratch" : "Scratch"}
-        </button>
-      </div>
+      ) : (
+        <div className="grid grid-cols-3 gap-2">
+          <button className={cls} disabled={!!busy || scratched || started} onClick={() => press("start")}>
+            {busy === "start" ? "…" : "Start now"}
+          </button>
+          <button className={cls} disabled={!!busy || !started} onClick={() => press("clear")}>
+            {busy === "clear" ? "…" : "Clear"}
+          </button>
+          <button className={cls} disabled={!!busy} onClick={() => press("status")}>
+            {busy === "status" ? "…" : scratched ? "Unscratch" : "Scratch"}
+          </button>
+        </div>
+      )}
       {error && <p className="mt-1.5 text-xs text-late">{error}</p>}
     </div>
   );

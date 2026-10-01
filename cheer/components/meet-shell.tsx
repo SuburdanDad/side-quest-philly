@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BellRing, Heart, LayoutList, Pause, RotateCcw, Trophy, Users, Wifi, WifiOff, X } from "lucide-react";
@@ -9,7 +9,8 @@ import { SPEEDS } from "@/src/demo/clock.ts";
 import { DEMO_MEET } from "@/src/demo/meet.ts";
 import { findRow } from "@/src/board.ts";
 import { dueAlerts } from "@/src/schedule.ts";
-import { formatClock, formatCountdown } from "@/src/format.ts";
+import { formatClock } from "@/src/format.ts";
+import { alertText } from "@/lib/eta-copy";
 import { freshnessLabel } from "@/lib/live-core";
 import type { MeetView } from "@/lib/meet-view";
 import { deviceActions, useDeviceState } from "@/lib/store";
@@ -30,6 +31,16 @@ const TABS = [
 /** Check-in link for this meet (the demo needs no param). */
 export const checkInHref = (view: MeetView) => (view.mode === "live" ? `/?meet=${view.meet.id}` : "/");
 
+/**
+ * onClick for a link that lands on another meet's check-in (or this meet's):
+ * select the meet before the router moves, so a reused prefetch of "/" can
+ * never leave the device on the old meet. Use with prefetch={false}.
+ */
+export const selectMeetOnClick = (meetId: string) => (e: MouseEvent) => {
+  if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  deviceActions.selectMeet(meetId);
+};
+
 export function MeetShell({ children }: { children: ReactNode }) {
   const view = useMeet();
   const pathname = usePathname();
@@ -44,7 +55,9 @@ export function MeetShell({ children }: { children: ReactNode }) {
     return (
       <Centered title="Meet not found">
         <p className="text-muted">That link doesn&apos;t match a meet we know. Double-check it, or try the demo.</p>
-        <ButtonLink href={`/?meet=${DEMO_MEET.id}`}>Try the demo meet</ButtonLink>
+        <ButtonLink href={`/?meet=${DEMO_MEET.id}`} prefetch={false} onClick={selectMeetOnClick(DEMO_MEET.id)}>
+          Try the demo meet
+        </ButtonLink>
       </Centered>
     );
   }
@@ -91,7 +104,7 @@ export function MeetShell({ children }: { children: ReactNode }) {
 function Centered({ title, children }: { title: string; children: ReactNode }) {
   return (
     <main className="mx-auto grid min-h-dvh max-w-[480px] place-content-center gap-4 px-4 text-center">
-      <p className="font-display text-4xl uppercase">{title}</p>
+      <h1 className="font-display text-4xl uppercase">{title}</h1>
       {children}
     </main>
   );
@@ -130,7 +143,7 @@ function Header({ view }: { view: MeetView }) {
 
 function Brand({ view }: { view: MeetView }) {
   return (
-    <Link href="/meet" className="min-w-0">
+    <Link href="/meet" className="flex min-h-12 min-w-0 flex-col justify-center">
       <span className="font-display text-2xl leading-none uppercase">
         {APP_NAME}
         <span className="text-bow">.</span>
@@ -147,7 +160,7 @@ function Brand({ view }: { view: MeetView }) {
 function FreshnessChip({ view }: { view: MeetView }) {
   const f = view.freshness;
   const tone = f.kind === "live" ? "go" : f.kind === "offline" ? "late" : "muted";
-  const Icon = f.kind === "offline" ? WifiOff : Wifi;
+  const Icon = f.kind === "offline" || f.kind === "reconnecting" ? WifiOff : Wifi;
   return (
     <span role="status" className="shrink-0">
       <Chip tone={tone}>
@@ -169,7 +182,7 @@ function DemoClock({ view }: { view: MeetView }) {
         <button
           onClick={() => setOpen((o) => !o)}
           aria-expanded={open}
-          className="flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-line bg-surface-2 px-3 text-xs font-bold tabular-nums"
+          className="flex h-12 shrink-0 items-center gap-1.5 rounded-full border border-line bg-surface-2 px-3 text-xs font-bold tabular-nums"
         >
           <span className="text-mat">DEMO</span>
           {formatClock(view.now, view.meet.timeZone)}
@@ -205,6 +218,8 @@ function DemoClock({ view }: { view: MeetView }) {
             </button>
             <Link
               href="/"
+              prefetch={false}
+              onClick={selectMeetOnClick(DEMO_MEET.id)}
               className="flex h-12 items-center justify-center gap-1.5 rounded-xl border border-line bg-surface text-sm font-bold"
             >
               <Users size={16} /> Change teams
@@ -233,7 +248,7 @@ function AlertBanner({ view }: { view: MeetView }) {
         teamId,
         lead,
         leads: due,
-        text: `${row.team.name} goes on in ~${formatCountdown(row.eta.estimatedAt - now)} · Mat ${row.slot.mat}, ${formatClock(row.eta.estimatedAt, meet.timeZone)}`,
+        text: alertText(row.team.name, row.slot.mat, row.eta.estimatedAt, now, meet.timeZone),
       };
     }
   }

@@ -22,6 +22,7 @@ import {
   myStateDelay,
   needsCheckInSync,
   nextHomeClose,
+  OPERATOR_MESSAGES,
   OUTBOX_MAX_AGE_MS,
   outboxAction,
   parseBallot,
@@ -151,6 +152,9 @@ test("write RPC results: ok, reasons, and unknown reasons fall back safely", () 
   assert.deepEqual(parseBallot({ ok: false, reason: "martian" }), { ok: false, reason: "invalid" });
   assert.deepEqual(parseOperator({ ok: false, reason: "locked" }), { ok: false, reason: "locked" });
   assert.deepEqual(parseOperator({ ok: true }), { ok: true });
+  assert.deepEqual(parseOperator({ ok: false, reason: "already-started" }), { ok: false, reason: "already-started" });
+  assert.deepEqual(parseOperator({ ok: false, reason: "slow-down" }), { ok: false, reason: "slow-down" });
+  assert.match(OPERATOR_MESSAGES["already-started"], /Clear it first/);
 });
 
 // --- Snapshot merging and schedule versions -----------------------------------
@@ -246,7 +250,12 @@ test("freshness: Live under 30 s, then Updated h:mm, Offline after a failure, Co
   const t = T0;
   assert.deepEqual(freshness(0, 0, t), { kind: "connecting" });
   assert.deepEqual(freshness(t - 29 * SEC, 0, t), { kind: "live" });
-  assert.deepEqual(freshness(t - 29 * SEC, t - SEC, t), { kind: "live" }, "one blip doesn't flip the chip");
+  assert.deepEqual(freshness(t - 29 * SEC, t - 30 * SEC, t), { kind: "live" }, "an older failure doesn't matter");
+  assert.deepEqual(
+    freshness(t - 29 * SEC, t - SEC, t),
+    { kind: "reconnecting" },
+    "a failure newer than the last success is never 'Live'",
+  );
   assert.deepEqual(freshness(t - 30 * SEC, 0, t), { kind: "updated", at: t - 30 * SEC });
   assert.deepEqual(freshness(t - 5 * MIN, t - SEC, t), { kind: "offline", at: t - 5 * MIN });
   assert.deepEqual(freshness(0, t - SEC, t), { kind: "offline", at: null });
@@ -255,6 +264,16 @@ test("freshness: Live under 30 s, then Updated h:mm, Offline after a failure, Co
   assert.equal(freshnessLabel({ kind: "live" }, tz), "Live");
   assert.equal(freshnessLabel({ kind: "updated", at: T0 + 41 * MIN }, tz), "Updated 9:41 AM");
   assert.equal(freshnessLabel({ kind: "offline", at: null }, tz), "Offline · last known times");
+  assert.equal(freshnessLabel({ kind: "reconnecting" }, tz), "Reconnecting…");
+});
+
+test("freshness times are server time: a phone 10 min fast still shows the server's clock", () => {
+  const device = T0 + 10 * MIN; // the device clock runs 10 min fast
+  const offset = -10 * MIN; // server − device
+  const f = freshness(device - 40 * SEC, 0, device, offset);
+  assert.deepEqual(f, { kind: "updated", at: T0 - 40 * SEC });
+  assert.equal(freshnessLabel(f, "America/New_York"), "Updated 8:59 AM");
+  assert.deepEqual(freshness(device - 5 * MIN, device - SEC, device, offset), { kind: "offline", at: T0 - 5 * MIN });
 });
 
 // --- Cadence ---------------------------------------------------------------------

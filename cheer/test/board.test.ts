@@ -28,6 +28,7 @@ test("before anything is confirmed: on time, first routine up next, first two ta
   const [mat1] = buildBoards(meet, new Map(), T0);
   assert.equal(mat1.driftMinutes, 0);
   assert.equal(mat1.lastConfirmedAt, undefined);
+  assert.equal(mat1.confirmed, false, "no anchor: the UI must not call this 'on time'");
   assert.equal(mat1.onMat, undefined);
   assert.equal(mat1.upNext?.team.id, "a");
   assert.deepEqual(mat1.tapCandidates.map((r) => r.team.id), ["a", "b"]);
@@ -39,6 +40,8 @@ test("on the mat, up next, open voting and tap candidates line up", () => {
   const [mat1, mat2] = buildBoards(meet, starts, now);
   assert.equal(mat1.driftMinutes, 5);
   assert.equal(mat1.lastConfirmedAt, T0 + 5 * MIN);
+  assert.equal(mat1.confirmed, true);
+  assert.equal(mat2.confirmed, false, "confirmed is per mat");
   assert.equal(mat1.onMat?.team.id, "a");
   assert.equal(mat1.onMat?.startedAt, T0 + 5 * MIN);
   assert.ok(mat1.onMat?.votingOpen);

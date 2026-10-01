@@ -5,16 +5,19 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { DEMO_MEET } from "../src/demo/meet.ts";
-import { emitSql, planFromCsv, planFromDemo, type PlanResult } from "./import-meet-lib.ts";
+import { MIN_OPERATOR_CODE, emitSql, generateOperatorCode, planFromCsv, planFromDemo, type PlanResult } from "./import-meet-lib.ts";
 
 const USAGE = `Usage:
   npm run import:meet -- --meet <id> --name "<name>" --date 2026-12-05 --tz America/New_York \\
-    [--venue <venue>] [--city <city>] [--min-taps 3] [--operator-code <code>] [--write-ids] \\
+    [--venue <venue>] [--city <city>] [--min-taps 3] [--operator | --operator-code <code>] [--write-ids] \\
     running-order.csv > meet.sql
   npm run import:meet -- --demo --start 2026-11-15T09:00-05:00 [--meet <id>] [--name "<name>"] \\
-    [--operator-code <code>] > practice.sql
+    [--operator | --operator-code <code>] > practice.sql
 
-CSV columns: mat,time,gym,team,division[,team_id]   (time is local, like 9:04 AM or 09:04)
+--operator        generate a random operator code (printed to stderr) and set it
+--operator-code   set this code instead: ${MIN_OPERATOR_CODE}+ characters, not guessable
+CSV columns: mat,time,gym,team,division[,team_id]   (time is local, like 9:04 AM or 09:04;
+             mat is the label only, like 1 or A: a leading "Mat" is dropped)
 Exit codes: 0 ok, 1 validation errors (no SQL written), 2 usage errors.`;
 
 function main(argv: string[]): number {
@@ -32,6 +35,7 @@ function main(argv: string[]): number {
         city: { type: "string" },
         "min-taps": { type: "string" },
         "operator-code": { type: "string" },
+        operator: { type: "boolean" },
         "write-ids": { type: "boolean" },
         demo: { type: "boolean" },
         start: { type: "string" },
@@ -52,6 +56,8 @@ function main(argv: string[]): number {
     return 2;
   };
   const minTaps = v["min-taps"] === undefined ? undefined : Number(v["min-taps"]);
+  const generatedCode = v.operator && v["operator-code"] === undefined;
+  const operatorCode = generatedCode ? generateOperatorCode() : v["operator-code"];
 
   let result: PlanResult;
   let csvPath: string | undefined;
@@ -61,7 +67,7 @@ function main(argv: string[]): number {
     if (!v.start) return usage("--demo needs --start <ISO time with offset>");
     result = planFromDemo(DEMO_MEET, v.start, {
       meet: { id: v.meet, name: v.name, timeZone: v.tz, venue: v.venue, city: v.city, minTaps },
-      operatorCode: v["operator-code"],
+      operatorCode,
     });
   } else {
     if (positionals.length !== 1) return usage("pass exactly one running-order CSV file");
@@ -78,7 +84,7 @@ function main(argv: string[]): number {
     result = planFromCsv(text, {
       meet: { id: v.meet, name: v.name, timeZone: v.tz, venue: v.venue, city: v.city, minTaps },
       date: v.date,
-      operatorCode: v["operator-code"],
+      operatorCode,
     });
   }
 
@@ -95,6 +101,7 @@ function main(argv: string[]): number {
     console.error(`wrote team_id values back into ${csvPath}`);
   }
   if (result.plan.operatorCode !== undefined) {
+    if (generatedCode) console.error(`operator code (generated): ${result.plan.operatorCode}`);
     console.error("note: the SQL contains the operator code. Apply it, then delete it; never commit it.");
   }
   process.stdout.write(emitSql(result.plan));

@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Clock, Heart, Lock, PartyPopper, Star } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { ArrowLeft, CircleSlash, Clock, Heart, Lock, PartyPopper, Star } from "lucide-react";
 import { findRow } from "@/src/board.ts";
 import { formatClock, formatMmSs } from "@/src/format.ts";
 import { AWARD_LABELS, ballotDeadline, OWN_TEAM_MESSAGE } from "@/src/voting.ts";
@@ -13,8 +14,14 @@ import { Button, ButtonLink, Card, Chip, Stars } from "./ui";
 
 const STAR_WORDS = ["", "Nice!", "Solid!", "Great!", "Amazing!", "Flawless!"];
 
+/** /meet/vote?team=<id>: read on the client, so the route is static and opens offline. */
+export function Vote() {
+  const teamId = useSearchParams().get("team") ?? "";
+  return <VoteScreen key={teamId} teamId={teamId} />;
+}
+
 /** The team comes from the meet on the client (live meets aren't known at build time). */
-export function Vote({ teamId }: { teamId: string }) {
+function VoteScreen({ teamId }: { teamId: string }) {
   const { boards, now, meet, homeTeamIds, myBallots, actions } = useMeet();
   const [stars, setStars] = useState(0);
   const [awards, setAwards] = useState<Award[]>([]);
@@ -25,7 +32,7 @@ export function Vote({ teamId }: { teamId: string }) {
   if (!row) {
     return (
       <Card>
-        <p className="font-display text-3xl uppercase">Team not found</p>
+        <h1 className="font-display text-3xl uppercase">Team not found</h1>
         <p className="mt-1 text-sm text-muted">That team isn&apos;t on this meet&apos;s running order.</p>
         <BackLink />
       </Card>
@@ -78,11 +85,24 @@ export function Vote({ teamId }: { teamId: string }) {
             </div>
           )}
           <p className="mt-4 text-sm text-muted">
-            Crowd Favorites for {team.division} land after its last routine.
+            {team.division} joins the Crowd Favorites board after its last routine.
           </p>
           <ButtonLink href="/meet/mats" variant="ghost" className="mt-5 w-full">
             Back to the mats
           </ButtonLink>
+        </Card>
+      </>
+    );
+  }
+
+  if (row.eta.status === "scratched") {
+    return (
+      <>
+        {header}
+        <Card className="mt-6 text-center">
+          <CircleSlash size={40} className="mx-auto text-late" />
+          <p className="mt-3 font-display text-3xl uppercase">Scratched</p>
+          <p className="mt-2 text-sm text-muted">{team.name} was scratched from the running order, so no voting.</p>
         </Card>
       </>
     );
@@ -99,9 +119,7 @@ export function Vote({ teamId }: { teamId: string }) {
           {notYet ? <Clock size={40} className="mx-auto text-mat" /> : <Lock size={40} className="mx-auto text-muted" />}
           <p className="mt-3 font-display text-3xl uppercase">{notYet ? "Not on the mat yet" : "Voting closed"}</p>
           <p className="mt-2 text-sm text-muted">
-            {row.eta.status === "scratched"
-              ? `${team.name} was scratched from the running order.`
-              : notYet
+            {notYet
                 ? `Voting opens the moment ${team.name} takes the mat (around ${formatClock(row.eta.estimatedAt, meet.timeZone)}).`
                 : "Voting closes a few minutes after each routine. Catch the next one!"}
           </p>

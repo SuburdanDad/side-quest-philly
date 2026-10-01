@@ -19,8 +19,8 @@ export function Favorites() {
         Crowd <span className="text-gold">Favorites</span>
       </h1>
       <p className="mt-2 text-sm text-muted">
-        Each division&apos;s results land after its last routine. We only ever show the top half (5 at most), never
-        the bottom.
+        One board for the whole meet. Each division joins it after its last routine, so places can shift during the
+        day. We only ever show the top half (5 at most), never the bottom.
       </p>
 
       {board.top.length === 0 ? (

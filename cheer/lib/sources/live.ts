@@ -314,8 +314,22 @@ function createStore(meetId: string): LiveStore {
     if (running && outbox().length > 0) outboxTimer = setTimeout(() => void flushOutbox(), OUTBOX_RETRY_MS);
   }
 
+  /**
+   * The outbox is shared by every tab on this device: only the tab holding the
+   * per-meet Web Lock drains it, so one press is never sent twice. A tab that
+   * finds the lock taken just tries again on its next round.
+   */
   const flushOutbox = coalesced(async () => {
     clearTimeout(outboxTimer);
+    const locks = typeof navigator !== "undefined" ? navigator.locks : undefined;
+    if (!locks) return drainOutbox();
+    await locks.request(`judgey-outbox-${meetId}`, { ifAvailable: true }, async (lock) => {
+      if (lock) await drainOutbox();
+      else scheduleFlush();
+    });
+  });
+
+  async function drainOutbox() {
     for (const entry of outbox()) {
       if (outboxAction(entry, Date.now()) === "drop") {
         deviceActions.removeTap(meetId, entry.teamId);
@@ -337,10 +351,11 @@ function createStore(meetId: string): LiveStore {
         void refreshMine();
       } catch {
         setTap(entry.teamId, { state: "retrying" });
+        set({ lastFailureAt: Date.now() }); // the freshness chip must not say "Live" now
       }
     }
     scheduleFlush();
-  });
+  }
 
   // --- lifecycle --------------------------------------------------------------
   function onVisibility() {
@@ -397,6 +412,7 @@ function createStore(meetId: string): LiveStore {
       if (res.reason === "not-operator") void refreshMine();
       return OPERATOR_MESSAGES[res.reason ?? "invalid"];
     } catch {
+      set({ lastFailureAt: Date.now() });
       return OFFLINE_MESSAGE;
     }
   }
@@ -418,10 +434,17 @@ function createStore(meetId: string): LiveStore {
       void flushOutbox();
     },
     async vote(teamId, stars, awards) {
-      // The server needs our fans row first (local-first check-in may still be syncing).
-      await withTimeout(startSession().then(syncCheckIn), ACTION_TIMEOUT_MS);
-      const args = { p_meet: meetId, p_team: teamId, p_stars: stars, p_awards: awards };
-      const error = ballotError(parseBallot(await withTimeout(callAuthed("cast_ballot", args), ACTION_TIMEOUT_MS)));
+      let res;
+      try {
+        // The server needs our fans row first (local-first check-in may still be syncing).
+        await withTimeout(startSession().then(syncCheckIn), ACTION_TIMEOUT_MS);
+        const args = { p_meet: meetId, p_team: teamId, p_stars: stars, p_awards: awards };
+        res = await withTimeout(callAuthed("cast_ballot", args), ACTION_TIMEOUT_MS);
+      } catch (e) {
+        set({ lastFailureAt: Date.now() }); // no signal: the chip stops saying "Live"
+        throw e;
+      }
+      const error = ballotError(parseBallot(res));
       if (!error) {
         mySeq++;
         setData(withBallot(state.data, teamId, { stars, awards }));
@@ -443,7 +466,9 @@ function createStore(meetId: string): LiveStore {
     const local = device.checkIns[meetId];
     const homeTeamIds = local?.homeTeamIds ?? NONE;
     const fresh: Freshness =
-      realNow === 0 ? { kind: "connecting" } : freshness(s.lastSuccessAt, s.lastFailureAt, realNow);
+      realNow === 0
+        ? { kind: "connecting" }
+        : freshness(s.lastSuccessAt, s.lastFailureAt, realNow, clockOffset(s.clock, data.offset));
     let result: MeetView;
     if (!data.meet || realNow === 0) {
       const checkedIn = !!local;

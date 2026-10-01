@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Anton, DM_Sans } from "next/font/google";
+import { ServiceWorker } from "@/components/service-worker";
 import { APP_NAME, DESCRIPTION, TAGLINE } from "@/src/brand.ts";
 import "./globals.css";
 
@@ -25,7 +26,10 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={`${anton.variable} ${dmSans.variable} antialiased`}>
-      <body className="min-h-dvh">{children}</body>
+      <body className="min-h-dvh">
+        {children}
+        <ServiceWorker />
+      </body>
     </html>
   );
 }

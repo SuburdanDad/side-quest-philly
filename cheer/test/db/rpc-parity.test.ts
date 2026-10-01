@@ -99,6 +99,7 @@ dbSuite("RPC parity with src/", (ctx) => {
       "op_set_start:clear",
       "op_set_start:not-operator",
       "op_set_start:unknown-team",
+      "op_set_start:already-started",
       "op_set_status:changed",
       "op_set_status:invalid",
       "op_set_status:not-operator",
@@ -406,7 +407,16 @@ async function tapSequence(db: TestDb, seed: number, minTaps: number, seen: Map<
         p_team: teamId,
         p_started_at_ms: value,
       });
-      const reason = caller !== operator ? "not-operator" : !slotOf(teamId) ? "unknown-team" : null;
+      // A start is never replaced in place (crowd or operator, scratched or not): Clear first.
+      const hasStart = slotOf(teamId) && (operatorStarts.has(teamId) || crowd(teamId) !== undefined);
+      const reason =
+        caller !== operator
+          ? "not-operator"
+          : !slotOf(teamId)
+            ? "unknown-team"
+            : value !== null && hasStart
+              ? "already-started"
+              : null;
       assert.deepEqual(
         result,
         reason ? { ok: false, reason } : { ok: true },

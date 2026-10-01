@@ -6,9 +6,13 @@ deleting what we promised to delete. The contract behind all of this is
 [`backend-spec.md`](backend-spec.md) (§7 import, §9 measurement and retention,
 §10 launch gate, §11 meet-day ops).
 
-Commands run from `cheer/`. `$DB_URL` is the project's **direct** Postgres
-connection string (Dashboard → Connect → Direct connection), used only from a
-laptop, never in the app.
+Commands run from `cheer/`. `$DB_URL` is the project's **session pooler**
+connection string (Dashboard → Connect → Session pooler,
+`postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres`),
+used only from a laptop, never in the app. Session mode speaks plain Postgres
+(transactions, `\gset`, temp tables) and works over **IPv4**. The "Direct
+connection" (`db.<ref>.supabase.co`) is IPv6-only unless the project buys the IPv4
+add-on, and many home and venue networks are IPv4-only: don't use it on meet morning.
 
 ## Timeline
 
@@ -26,18 +30,34 @@ laptop, never in the app.
 1. **Create the Supabase project.** Region close to the venue (us-east-1 for
    Philadelphia). Postgres 17. Use a paid plan for meet week: free projects
    pause when idle and have tighter limits.
-2. **Apply the migrations**, in name order, each in one transaction:
+2. **Apply the migrations** with this psql loop, and only this loop (it is the
+   one migration path: `cheer/supabase` has no CLI `config.toml`, so don't mix in
+   `supabase db push`, whose history table wouldn't know about these files). It
+   applies each new file in name order, in one transaction together with the row
+   that records it, exactly like `supabase/local/up.sh` does locally, so on later
+   releases you just run it again:
 
    ```bash
+   psql "$DB_URL" -v ON_ERROR_STOP=1 -q \
+     -c "create schema if not exists judgey_ops" \
+     -c "revoke all on schema judgey_ops from public, anon, authenticated" \
+     -c "create table if not exists judgey_ops.applied_migrations (name text primary key, applied_at timestamptz not null default now())"
    for f in supabase/migrations/*.sql; do
-     psql "$DB_URL" -v ON_ERROR_STOP=1 -1 -f "$f" || break
+     name="$(basename "$f")"
+     [ "$(psql "$DB_URL" -tAc "select 1 from judgey_ops.applied_migrations where name = '$name'")" = 1 ] && continue
+     echo "applying $name"
+     psql "$DB_URL" -v ON_ERROR_STOP=1 -q -1 -f "$f" \
+       -c "insert into judgey_ops.applied_migrations (name) values ('$name')" || break
    done
+   psql "$DB_URL" -tAc "select name from judgey_ops.applied_migrations order by name"
    ```
 
-   (With the Supabase CLI set up for this folder, `supabase db push` does the same
-   and records the history.) Re-run only new files on later releases.
+   The last line must list every file in `supabase/migrations/`.
 3. **Data API.** Settings → Data API → exposed schemas: `public` only. Never
-   expose `judgey_private`.
+   expose `judgey_private` (or `judgey_ops`). **Remove `graphql_public`** from the
+   list: the migrations drop the `pg_graphql` extension (nothing uses
+   `/graphql/v1`, and it raises advisor lints 0026/0027 on every readable table),
+   so that schema has nothing behind it.
 4. **Auth settings** (Authentication in the dashboard):
    - Sign In / Providers → **Allow anonymous sign-ins: on.** Every phone is an
      anonymous user; there is no login UI.
@@ -48,7 +68,17 @@ laptop, never in the app.
    - Sessions / JWT → **JWT expiry ≥ 12 h** (`jwt_exp` 43200): a meet day is long
      and arena signal is bad, so refreshes should be rare.
    - Attack Protection → **CAPTCHA: Cloudflare Turnstile on**, with the Turnstile
-     secret key. The site key goes to Vercel (below).
+     secret key. The site key goes to Vercel (below). In the Cloudflare Turnstile
+     widget, the **hostname list** must include the production domain and any
+     preview domain you'll use for the two-browser check, or sign-in fails there.
+
+   Why Turnstile matters: every vote rule is "one per **identity**", and an
+   identity is a free anonymous sign-in. Ballot stuffing (many identities voting
+   for one team) and operator-code guessing from fresh identities are limited only
+   by how hard it is to mint identities: Turnstile plus the anonymous sign-in rate
+   limit. Crowd Favorites is a fan-engagement feature, not an integrity-grade
+   result. The launch gate below checks Turnstile is actually enforced, and §4 has
+   a query to spot and void a burst.
 
    The same settings through the Management API, if you prefer a script:
 
@@ -61,22 +91,50 @@ laptop, never in the app.
           "security_captcha_secret": "'"$TURNSTILE_SECRET"'"}'
    ```
 
-5. **Vercel env vars** (Production and Preview), then redeploy, because
-   `NEXT_PUBLIC_*` values are inlined at build time:
-   - `NEXT_PUBLIC_SUPABASE_URL` = `https://<ref>.supabase.co`
-   - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` = the `sb_publishable_…` key
-   - `NEXT_PUBLIC_TURNSTILE_SITE_KEY` = the Turnstile site key
+5. **Vercel project** (separate from the Side Quest app at the repo root):
+   - Add New → Project → import the same Git repo. **Root Directory: `cheer`**.
+     Framework preset Next.js; build and install commands default
+     (`npm run build`, `npm install`).
+   - Settings → Build and Deployment → **Node.js version 22.x** (the app needs ≥ 22.6).
+   - Settings → Git → **Ignored Build Step**: run `git diff --quiet HEAD^ HEAD -- .`
+     (it runs inside `cheer/`, so commits that touch only the root app skip this
+     project; and the root project should ignore `cheer/` the same way).
+   - `next.config.ts` pins `turbopack.root` and `outputFileTracingRoot` to `cheer/`,
+     so the repo's second lockfile doesn't make Next pick the parent as the
+     workspace root (no "inferred your workspace root" warning in the build log).
+   - **Env vars** (Production and Preview), then redeploy, because
+     `NEXT_PUBLIC_*` values are inlined at build time:
+     - `NEXT_PUBLIC_SUPABASE_URL` = `https://<ref>.supabase.co`
+     - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` = the `sb_publishable_…` key
+     - `NEXT_PUBLIC_TURNSTILE_SITE_KEY` = the Turnstile site key
 
    The app needs no secret key. Never put the `sb_secret_…`/service-role key in Vercel.
 6. **Launch gate** (spec §10). All of these must hold before the meet:
-   - Migrations applied (the list above, nothing skipped).
+   - Migrations applied (the `judgey_ops.applied_migrations` list above matches
+     `supabase/migrations/`, nothing skipped), and
+     `select count(*) from pg_extension where extname = 'pg_graphql';` returns 0.
+   - Data API exposed schemas are exactly `public` (no `graphql_public`).
    - Advisors (Dashboard → Advisors → Security and Performance) are clean
      **except** lints 0028/0029 on exactly the public RPCs (`meet_snapshot` for
      anon; `my_state`, `check_in`, `tap_mat`, `cast_ballot`, `touch`,
      `claim_operator`, `op_set_start`, `op_set_status` for authenticated). Those
      are intentional endpoints that validate their inputs. Anything else blocks launch,
      except "unused index" (0005, INFO) on a project that has not had traffic yet.
+     In particular 0026/0027 (`pg_graphql_*_table_exposed`) must not appear; if they
+     do, `pg_graphql` is still installed.
    - Auth settings above are applied.
+   - **Turnstile is enforced, not just switched on.** An anonymous sign-in
+     without a captcha token must be refused by the real project:
+
+     ```bash
+     curl -sS -w '\nHTTP %{http_code}\n' -X POST "https://<ref>.supabase.co/auth/v1/signup" \
+       -H "apikey: $NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY" -H "Content-Type: application/json" -d '{}'
+     ```
+
+     Pass: an HTTP 4xx whose message mentions captcha. Fail (launch blocked): HTTP
+     200 with an `access_token`, meaning anyone can mint identities freely. (The
+     local rehearsal stack has no captcha and returns 200, so this can only be
+     checked on the real project.)
    - The DB suite passes against the real Supabase image (see "Rehearsal").
    - A **two-browser live check** on the deployed site with a practice meet: two
      browsers (one private window) both tap the up-next team, the start confirms
@@ -98,20 +156,34 @@ Never hand-write rows: the importer validates the schedule and emits idempotent 
 
 1. Turn the producer's running order (PDF) into a CSV with the header
    `mat,time,gym,team,division` (optional `team_id`). `time` is the **local**
-   wall-clock time as printed (`9:04 AM` or `09:04`). Quoted fields, a BOM and
-   Excel's CRLF line endings are all fine.
+   wall-clock time as printed (`9:04 AM` or `09:04`). `mat` is just the mat's
+   label, like `1`, `2` or `A` (the app prints "Mat" itself; a leading "Mat" in
+   the cell is dropped, so `Mat 1` and `1` are the same mat). Quoted fields, a BOM
+   and Excel's CRLF line endings are all fine. Spell each division exactly the same
+   way on every row.
 2. Run the importer (it prints a summary and any errors to stderr, SQL to stdout):
 
    ```bash
    npm run -s import:meet -- --meet riverside-2026 --name "Riverside Invitational" \
      --date 2026-12-05 --tz America/New_York --venue "Hall B" --city "Philadelphia, PA" \
-     --operator-code "$OPERATOR_CODE" --write-ids running-order.csv > meet.sql
+     --operator --write-ids running-order.csv > meet.sql
    ```
 
+   - `--operator` generates a random operator code and prints it to stderr
+     (`operator code (generated): …`); see §3. Omit it on later revisions to keep
+     the current code.
    - Check the summary against the PDF: per-mat first/last time and count, divisions.
-   - Errors (duplicate team ids, times not increasing within a mat, times outside
-     6:00 AM–10:00 PM local, unparseable times, a time skipped by DST) exit non-zero
-     and write no SQL. Fix the CSV and re-run.
+   - Errors exit non-zero and write no SQL: duplicate team ids, times not
+     increasing within a mat, times outside 6:00 AM–10:00 PM local, unparseable
+     times, a time skipped by DST, an **unterminated quote** (reported with the
+     line where it opened), a line break inside a mat/time/gym/team/division
+     cell, two spellings of one division or mat that differ only in case or
+     spacing (both spellings and line numbers are printed), a mat label longer
+     than 16 characters or a gym/team/division longer than 80, and a weak
+     `--operator-code`. Fix the CSV and re-run. Runs of spaces inside names are
+     collapsed to one.
+   - A warning (not an error) names any gym + team listed twice: fine if they
+     really compete twice, otherwise delete the duplicate row.
    - `--write-ids` writes the generated `team_id`s back into the CSV. Keep that
      CSV: later revisions must reuse the same ids or teams get scratched and re-added.
    - `--min-taps 3` raises the crowd confirmation threshold for a big, noisy meet
@@ -127,12 +199,24 @@ command, then apply. Routines that are no longer in the CSV become `scratched`
 (never deleted, so their taps and ballots stay), and every import bumps
 `schedule_version` so phones refetch the schedule on their next poll.
 
+> **The CSV is the truth, including for scratches.** A re-import puts every
+> routine still listed in the CSV back to `scheduled`, **including teams an
+> operator scratched today**. Before a meet-day re-import, list them and delete
+> those rows from the CSV (or scratch them again in the app right after):
+>
+> ```sql
+> select team_id, team_name from public.routines where meet_id = '<id>' and status = 'scratched';
+> ```
+>
+> The SQL also tells you: applying it prints
+> `NOTICE: Re-import UN-SCRATCHES: <team ids> …` for every routine it brings back.
+
 **Practice meet** (rehearsals, the two-browser check): the demo roster shifted
 to any start. The start must carry an explicit offset:
 
 ```bash
 npm run -s import:meet -- --demo --start 2026-11-15T19:00-05:00 \
-  --meet practice-1115 --name "Practice night" --operator-code "$OPERATOR_CODE" > practice.sql
+  --meet practice-1115 --name "Practice night" --operator > practice.sql
 ```
 
 ## 3. Operators (the meet-day safety net)
@@ -141,10 +225,17 @@ Operators can set a start by hand ("Start now"), clear a bad one ("Clear", which
 also drops that routine's taps so the crowd can re-confirm) and scratch or
 unscratch a routine.
 
-1. Generate a code of at least 12 random characters, e.g.
-   `openssl rand -base64 12 | tr -d '/+='`. Only its bcrypt hash is stored.
-2. Pass it to the import with `--operator-code` (re-importing with a new code
-   rotates it; people who already claimed stay operators).
+1. Import with `--operator`: the importer generates a 20-character random code
+   (`xxxxx-xxxxx-xxxxx-xxxxx`, 100 bits) and prints it to stderr. Only its bcrypt
+   hash is stored. Anyone can mint anonymous identities, and the 10-attempt cap is
+   per identity, so the code's randomness is what actually stops guessing (the
+   meet-wide `'slow-down'` after 30 wrong codes a minute only slows it).
+   `--operator-code <code>` sets your own instead, but it must be at least 16
+   characters and is refused if it is repetitive, contains the meet id or name, or
+   contains a stock password fragment.
+2. Re-importing with `--operator` (or a new `--operator-code`) rotates the code;
+   people who already claimed stay operators. Re-importing without either keeps
+   the current code.
 3. Before doors open, the founder and one helper per mat open
    `https://<site>/?meet=<id>&op=<code>` **on the phone they will use all day**.
    The app claims the code once and removes it from the URL. Share the link in
@@ -168,7 +259,11 @@ unscratch a routine.
 - [ ] A mat chip says "last confirmed h:mm" from 20+ min ago → the crowd is quiet:
       an operator taps "Start now" when the next team goes on.
 - [ ] A start is wrong (griefers, a swap nobody tapped) → "Clear", then "Start now".
-- [ ] A team withdraws → "Scratch". Unscratch if it was a mistake.
+- [ ] A team withdraws → "Scratch". Unscratch if it was a mistake. If you
+      re-import later today, delete that team's row from the CSV first (a re-import
+      un-scratches every listed team; see §2 Revisions).
+- [ ] Before announcing awards (and whenever a team's votes jump oddly), run the
+      ballot-stuffing check below.
 - Quick look at every mat's latest start:
 
   ```sql
@@ -178,6 +273,75 @@ unscratch a routine.
   where r.meet_id = '<id>' and r.status = 'scheduled'
   order by r.mat, r.scheduled_at desc;
   ```
+
+### Ballot-stuffing check (operator-run admin SQL)
+
+One ballot per identity is only as strong as anonymous sign-in friction (§1,
+Turnstile). The tell of stuffing is a **burst**: many identities created within
+the same minute or two, each casting its first and only action seconds later,
+all for one team, with no taps. Honest parents vote for several teams over the
+day and tap mats. Run this as `postgres` in the SQL editor or psql (`\set meet '<id>'`):
+
+```sql
+-- Bursts: fresh identities (ballot < 120 s after sign-in) with no taps that voted
+-- for exactly one team at this meet, grouped by team and minute of sign-in.
+with fresh as (
+  select b.team_id, b.user_id, b.stars, b.cast_at, u.created_at
+  from public.ballots b
+  join auth.users u on u.id = b.user_id
+  where b.meet_id = :'meet' and u.is_anonymous
+    and b.cast_at - u.created_at < interval '120 seconds'
+    and not exists (select 1 from public.taps t where t.meet_id = b.meet_id and t.user_id = b.user_id)
+    and not exists (select 1 from public.ballots o
+                    where o.meet_id = b.meet_id and o.user_id = b.user_id and o.team_id <> b.team_id)
+)
+select team_id, date_trunc('minute', created_at) as minute, count(*) as fresh_voters,
+       round(avg(stars), 1) as avg_stars
+from fresh group by 1, 2 having count(*) >= 5 order by fresh_voters desc;
+```
+
+A handful of rows at doors-open is normal. A team with a big burst of 5-star
+fresh voters in one minute, out of line with its other votes, is suspect: it is
+a human judgement call, so look before voiding. To void one burst (deletes those
+ballots and un-counts them from `team_tallies` in the same transaction, like
+`check_in` does), set the team and the burst's minute from the row above:
+
+```sql
+\set team '<team_id>'
+\set minute '<minute from the burst row, e.g. 2026-12-05 15:42:00+00>'
+begin;
+create temp table suspect on commit drop as
+select b.team_id, b.user_id
+from public.ballots b join auth.users u on u.id = b.user_id
+where b.meet_id = :'meet' and b.team_id = :'team' and u.is_anonymous
+  and date_trunc('minute', u.created_at) = :'minute'
+  and b.cast_at - u.created_at < interval '120 seconds'
+  and not exists (select 1 from public.taps t where t.meet_id = b.meet_id and t.user_id = b.user_id)
+  and not exists (select 1 from public.ballots o
+                  where o.meet_id = b.meet_id and o.user_id = b.user_id and o.team_id <> b.team_id);
+select count(*) as to_void from suspect;   -- must match fresh_voters; else rollback;
+with gone as (
+  delete from public.ballots b using suspect s
+  where b.meet_id = :'meet' and b.team_id = s.team_id and b.user_id = s.user_id
+  returning b.team_id, b.stars, b.awards
+), per_team as (
+  select team_id, count(*) as n, sum(stars) as stars,
+         count(*) filter (where 'stunts' = any (awards)) as stunts,
+         count(*) filter (where 'tumbling' = any (awards)) as tumbling,
+         count(*) filter (where 'spirit' = any (awards)) as spirit,
+         count(*) filter (where 'dance' = any (awards)) as dance
+  from gone group by team_id
+)
+update judgey_private.team_tallies t
+set votes = t.votes - p.n, star_sum = t.star_sum - p.stars, stunts = t.stunts - p.stunts,
+    tumbling = t.tumbling - p.tumbling, spirit = t.spirit - p.spirit, dance = t.dance - p.dance
+from per_team p
+where t.meet_id = :'meet' and t.team_id = p.team_id;
+commit;
+```
+
+The board and awards update on the next snapshot poll. Those identities can
+still vote for other teams; this is cleanup, not a ban.
 
 **If something breaks:** ETAs never depend on sign-in. If Auth is rate-limited,
 the running order and confirmed starts still load; taps and votes retry in the
@@ -254,23 +418,59 @@ The premise to prove: at least 15 returning parents, and at least one `share` fi
 
 ## 6. Retention (30 days after the meet)
 
-The check-in screen promises "Deleted 30 days after the meet". On T+30 days,
-in the SQL editor:
+The check-in screen promises "Deleted 30 days after the meet". On (or any time
+after) T+30 days, run this as one transaction (psql: `\set meet '<id>'` first).
+The cutoff is anchored to the **meet**, not to the moment it runs: local midnight
+at the end of the meet's last scheduled day, in the meet's time zone. (A rolling
+`created_at < now() - interval '30 days'` run once on T+30 would keep everyone who
+signed in later in the day than the job ran, which is most of the crowd, along
+with their session IP and user-agent rows, which cascade from `auth.users`.)
 
 ```sql
-select judgey_private.purge_meet('<id>');   -- fans, taps, ballots, visits, operator rows
-delete from auth.users where is_anonymous and created_at < now() - interval '30 days';
+begin;
+-- The end of meet day, in the meet's zone (e.g. 2026-12-06 05:00:00+00).
+select ((max(r.scheduled_at) at time zone m.time_zone)::date + 1)::timestamp at time zone m.time_zone
+       as meet_day_end
+from public.routines r join public.meets m on m.id = r.meet_id
+where r.meet_id = :'meet' group by m.time_zone \gset
+-- 1) Every anonymous identity that touched this meet (before purge_meet removes fans/visits).
+delete from auth.users u where u.is_anonymous and (
+  exists (select 1 from public.visits v where v.meet_id = :'meet' and v.user_id = u.id)
+  or exists (select 1 from public.fans f where f.meet_id = :'meet' and f.user_id = u.id));
+-- 2) Any other anonymous identity created up to the end of meet day (fixed cutoff).
+delete from auth.users where is_anonymous and created_at < :'meet_day_end';
+-- 3) The meet's personal rows: fans, taps, ballots, visits, operator rows.
+select judgey_private.purge_meet(:'meet');
+-- Check: must be 0.
+select count(*) as must_be_0 from auth.users where is_anonymous and created_at < :'meet_day_end';
+commit;
 ```
 
 `purge_meet` keeps the meet, its routines, the confirmed starts and the
-`team_tallies` aggregates (no identities). Put a calendar reminder on the meet
-date + 30 days when you import, or schedule it with pg_cron (enable the `pg_cron`
-extension first: Database → Extensions):
+`team_tallies` aggregates (no identities). Deleting an `auth.users` row also
+deletes its sessions and refresh tokens. A parent who reuses one phone across
+meets loses that identity at the first meet's purge and simply gets a new one;
+their rows at a later meet go with that meet's purge. Identities first created
+after meet day (a late recap view) are swept by the next meet's step 2; after the
+season's last meet, run step 2 once more a month later.
+
+Put a calendar reminder on the meet date + 30 days when you import, or schedule
+it with pg_cron (enable the `pg_cron` extension first: Database → Extensions).
+pg_cron schedules are in **UTC**, and because the cutoff is fixed the time of day
+no longer matters. The job body is one command, so it runs as one transaction:
 
 ```sql
-select cron.schedule('purge-<id>', '0 9 4 1 *',   -- pick the date 30 days out
-  $$select judgey_private.purge_meet('<id>');
-    delete from auth.users where is_anonymous and created_at < now() - interval '30 days'$$);
+select cron.schedule('purge-<id>', '7 14 4 1 *',   -- 14:07 UTC on the date 30 days out
+  $$delete from auth.users u where u.is_anonymous and (
+      exists (select 1 from public.visits v where v.meet_id = '<id>' and v.user_id = u.id)
+      or exists (select 1 from public.fans f where f.meet_id = '<id>' and f.user_id = u.id));
+    delete from auth.users where is_anonymous and created_at < (
+      select ((max(r.scheduled_at) at time zone m.time_zone)::date + 1)::timestamp at time zone m.time_zone
+      from public.routines r join public.meets m on m.id = r.meet_id
+      where r.meet_id = '<id>' group by m.time_zone);
+    select judgey_private.purge_meet('<id>');$$);
 ```
 
-(Unschedule it afterwards with `select cron.unschedule('purge-<id>');`.)
+Afterwards check `select * from cron.job_run_details order by start_time desc limit 5;`
+(status `succeeded`) and the must-be-0 count above, then
+`select cron.unschedule('purge-<id>');`.

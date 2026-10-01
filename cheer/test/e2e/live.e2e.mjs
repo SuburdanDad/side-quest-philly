@@ -68,8 +68,8 @@ const [first, second, third, fourth] = mat1;
 console.log("mat 1:", mat1.slice(0, 4).map((r) => r.team_name).join(", "));
 
 const browser = await chromium.launch();
-const phone = async (label) => {
-  const ctx = await browser.newContext({ ...devices["iPhone 13"] });
+const phone = async (label, options = {}) => {
+  const ctx = await browser.newContext({ ...devices["iPhone 13"], ...options });
   const page = await ctx.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(String(e)));
@@ -77,7 +77,8 @@ const phone = async (label) => {
   return { ctx, page, errors, label };
 };
 const A = await phone("parent");
-const B = await phone("fan");
+// No service worker for the fan: step 8 proves in-app navigation works offline on its own.
+const B = await phone("fan", { serviceWorkers: "block" });
 const C = await phone("operator");
 
 // 1. Parent checks in for the first team via a QR link; ETA renders.
@@ -121,7 +122,8 @@ check("parent's phone flips to 'On the mat' within one poll",
 await A.page.screenshot({ path: `${OUT}/2-parent-mats-confirmed.png`, fullPage: true });
 
 // 4. Fan votes; parent is blocked from voting for their own team.
-await B.page.goto(`${APP}/meet/vote/${first.team_id}`);
+const voteUrl = (team) => `${APP}/meet/vote?team=${encodeURIComponent(team.team_id)}`;
+await B.page.goto(voteUrl(first));
 await B.page.getByRole("radio", { name: "5 stars" }).click();
 await B.page.getByRole("button", { name: "Best Stunts" }).click();
 await B.page.getByRole("button", { name: /Send my cheer/ }).click();
@@ -129,8 +131,11 @@ check("fan's vote accepted", !!(await eventually(() => B.page.getByText(/Your ch
 await B.page.screenshot({ path: `${OUT}/3-fan-voted.png` });
 const tally = (await q(`select votes, star_sum, stunts from judgey_private.team_tallies where meet_id=$1 and team_id=$2`, [MEET, first.team_id]))[0];
 check("tally counted server-side", tally?.votes === 1 && tally?.star_sum === 5 && tally?.stunts === 1, JSON.stringify(tally));
-await A.page.goto(`${APP}/meet/vote/${first.team_id}`);
+await A.page.goto(voteUrl(first));
 check("parent sees the own-team block", !!(await eventually(() => A.page.getByText(/you think they.re perfect/i).isVisible())));
+await A.page.goto(`${APP}/meet/vote/${first.team_id}`);
+check("old /meet/vote/<team> links redirect to /meet/vote?team=",
+  !!(await eventually(() => A.page.url().endsWith(`/meet/vote?team=${first.team_id}`))), A.page.url());
 
 // 5. Server enforces rules even when the UI is bypassed (direct RPC with a fresh anonymous identity).
 const bot = async () => {
@@ -163,6 +168,22 @@ check("operator claimed server-side", !!(await eventually(async () =>
   (await q(`select count(*)::int n from judgey_private.meet_operators where meet_id=$1`, [MEET]))[0].n === 1)));
 await C.page.goto(`${APP}/meet/mats?mat=1`);
 check("operator controls visible", !!(await eventually(() => C.page.getByRole("button", { name: "Start now" }).first().isVisible())));
+const opRow = (team) => C.page.locator("li", { hasText: team.team_name });
+check("Start now is disabled on a routine that already has a start",
+  await opRow(first).getByRole("button", { name: "Start now" }).isDisabled());
+await opRow(first).getByRole("button", { name: "Clear" }).click();
+check("Clear asks for a second tap naming the team",
+  !!(await eventually(() => opRow(first).getByRole("button", { name: `Tap again to clear ${first.team_name}'s start` }).isVisible())));
+await sleep(4500);
+check("the armed Clear cancels itself after 4 s",
+  (await opRow(first).getByRole("button", { name: "Clear" }).isVisible()) &&
+  (await q(`select count(*)::int n from routine_starts where meet_id=$1 and team_id=$2`, [MEET, first.team_id]))[0].n === 1);
+await opRow(fourth).getByRole("button", { name: "Start now" }).click();
+await sleep(1000);
+check("Start now on a far-ahead routine needs a second tap (nothing written yet)",
+  (await opRow(fourth).getByRole("button", { name: `Tap again to start ${fourth.team_name} now` }).isVisible()) &&
+  (await q(`select count(*)::int n from routine_starts where meet_id=$1 and team_id=$2`, [MEET, fourth.team_id]))[0].n === 0);
+await sleep(4500);
 const startNow = async (team) => {
   await C.page.locator("li", { hasText: team.team_name }).getByRole("button", { name: "Start now" }).click();
   return eventually(async () =>
@@ -212,16 +233,86 @@ check("parent's Favorites shows the board and their recap",
   !!(await eventually(async () => (await A.page.getByText(/fans cheered for/i).count()) > 0, 25_000)));
 await A.page.screenshot({ path: `${OUT}/5-parent-favorites.png`, fullPage: true });
 
-// 8. Offline: the last known running order stays on screen, with an offline chip.
+// 8. Offline: the last known running order stays on screen, with an offline chip,
+// and every in-app navigation (tabs, mat cards, a Vote link) still works.
+const fifth = mat1[4];
+await startNow(fifth); // an open voting window, so the fan has a Vote link
 await B.page.goto(`${APP}/meet/mats?mat=1`);
 await eventually(() => B.page.getByText(first.team_name).first().isVisible());
+await eventually(async () => (await B.page.getByRole("link", { name: "Vote" }).count()) > 0);
+await B.page.getByRole("link", { name: "My Team" }).click(); // visit each tab once online (prefetches settle)
+await B.page.waitForURL("**/meet");
+await sleep(2000);
 await B.ctx.setOffline(true);
 check("offline: last known times stay and the chip says so", !!(await eventually(async () =>
-  (await B.page.getByText(/offline/i).count()) > 0 && (await B.page.getByText(first.team_name).first().isVisible()), 40_000)));
+  (await B.page.getByText(/offline/i).count()) > 0 && (await B.page.getByText(/On the mats/i).first().isVisible()), 40_000)));
+const notBlank = async (P) => !P.page.url().startsWith("chrome-error") && (await P.page.locator("nav a").count()) === 3;
+for (const [tab, path, text] of [
+  ["Mats", "/meet/mats", first.team_name],
+  ["Favorites", "/meet/favorites", "Shout-outs"],
+  ["My Team", "/meet", "On the mats"],
+  ["Mats", "/meet/mats", first.team_name],
+]) {
+  await B.page.getByRole("link", { name: tab, exact: true }).click();
+  check(`offline: ${tab} tab opens from the cache`, !!(await eventually(async () =>
+    new URL(B.page.url()).pathname === path && (await notBlank(B)) &&
+    (await B.page.getByText(text).first().isVisible()), 15_000)), B.page.url());
+}
+await B.page.getByRole("link", { name: "Vote" }).first().click();
+check("offline: a Vote link opens the vote screen", !!(await eventually(async () =>
+  B.page.url().includes("/meet/vote?team=") && (await notBlank(B)) &&
+  (await B.page.getByRole("heading", { level: 1 }).first().isVisible()), 15_000)), B.page.url());
 await B.page.screenshot({ path: `${OUT}/6-fan-offline.png` });
 await B.ctx.setOffline(false);
 
-const pageErrors = [A, B, C].flatMap((p) => p.errors.map((e) => `${p.label}: ${e}`))
+// 9. Offline app shell (service worker): load once online, then reload with no signal.
+const D = await phone("returning fan");
+await D.page.goto(`${APP}/?meet=${MEET}&src=qr`);
+await D.page.getByRole("button", { name: new RegExp(second.team_name) }).first().click();
+await D.page.getByRole("button", { name: /Let's go/ }).click();
+await D.page.waitForURL("**/meet");
+const swReady = await eventually(() => D.page.evaluate(async () => {
+  const reg = await navigator.serviceWorker.getRegistration();
+  if (!reg?.active) return false;
+  const pages = await caches.open("judgey-pages-v1");
+  return (await pages.keys()).length >= 5;
+}), 30_000);
+check("service worker installed and the app shell cached", !!swReady);
+await D.page.getByRole("link", { name: "Mats", exact: true }).click(); // the running order lands in the cache
+await D.page.waitForURL("**/meet/mats");
+await eventually(() => D.page.getByText(second.team_name).first().isVisible());
+await D.ctx.setOffline(true);
+let reloadError = "";
+await D.page.reload().catch((e) => (reloadError = String(e)));
+check("offline reload renders the cached running order with the offline chip", !!(await eventually(async () =>
+  (await notBlank(D)) && (await D.page.getByText(second.team_name).first().isVisible()) &&
+  (await D.page.getByText(/offline/i).count()) > 0, 40_000)), reloadError);
+for (const [tab, path] of [["My Team", "/meet"], ["Favorites", "/meet/favorites"], ["Mats", "/meet/mats"]]) {
+  await D.page.getByRole("link", { name: tab, exact: true }).click();
+  check(`offline after reload: ${tab} tab works`, !!(await eventually(async () =>
+    new URL(D.page.url()).pathname === path && (await notBlank(D)), 15_000)), D.page.url());
+}
+await D.page.goto(voteUrl(fifth)).catch(() => {});
+check("offline after reload: the vote page opens", !!(await eventually(async () =>
+  (await notBlank(D)) && (await D.page.getByText(fifth.team_name).first().isVisible()), 15_000)), D.page.url());
+await D.page.screenshot({ path: `${OUT}/7-offline-reload-vote.png` });
+await D.ctx.setOffline(false);
+
+// 10. Cross-meet links: after a while on a live meet, "Try the demo meet" really switches.
+await D.page.goto(`${APP}/meet`);
+await sleep(3000); // prefetches of /?meet=<live> settle
+await D.page.getByRole("link", { name: /Change teams/ }).click();
+await D.page.waitForURL(`**/?meet=${MEET}`);
+await D.page.getByRole("link", { name: /Try the demo meet/ }).click();
+check("'Try the demo meet' opens the demo after time on a live meet", !!(await eventually(async () =>
+  (await D.page.getByText("Demo meet").first().isVisible()) && D.page.url().includes("winter-classic-2026"), 15_000)),
+  D.page.url());
+
+// After an offline reload the router has no prefetched payloads, so Next logs this and
+// falls back to a full navigation, which the service worker serves (checked in step 9).
+// Only the service-worker phone may log it: phone B (no service worker) must not.
+const swFallback = (p, e) => p === D && /Failed to fetch RSC payload/.test(e);
+const pageErrors = [A, B, C, D].flatMap((p) => p.errors.filter((e) => !swFallback(p, e)).map((e) => `${p.label}: ${e}`))
   .filter((e) => !/Failed to load resource|ERR_INTERNET_DISCONNECTED|net::/.test(e));
 check("no unexpected page errors", pageErrors.length === 0, pageErrors.slice(0, 3).join(" | "));
 await browser.close();

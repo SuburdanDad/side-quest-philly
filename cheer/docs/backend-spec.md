@@ -18,7 +18,13 @@ below are binding. If one part needs to deviate, update this file first.
 3. The server enforces every rule a cheater would want to bend: tap
    sequencing, own-team block, voting window, one ballot per identity per
    routine, star range, valid shout-outs, and **only the top half (max 5) of
-   revealed teams ever leaves the database**.
+   revealed teams ever leaves the database**. An "identity" is a free anonymous
+   sign-in, so one-ballot-per-identity is **only as strong as anonymous sign-in
+   friction** (Turnstile plus the anonymous sign-in rate limit): someone willing to
+   solve many challenges can cast many ballots. Crowd Favorites is a fan-engagement
+   signal, not an integrity-grade result. The launch gate (§10) therefore verifies
+   Turnstile is enforced on the real project, and the runbook (§4) has an
+   operator-run query to spot and void ballot bursts.
 4. One bad tap pair, a scratched team or an empty section can't wreck a
    mat, and a trusted **operator** can fix any start in one tap.
 5. Works on bad arena signal: cached running order, last-known starts, tap
@@ -114,7 +120,9 @@ SQL truncates every stored time to milliseconds with `date_trunc('milliseconds',
   and alerts) can be edited freely. When check-in *newly* adds a team the identity
   already voted for, that ballot is deleted (and un-counted) in the same
   transaction. This is a fairness nudge, not a security boundary (a second browser
-  defeats it), and the spec says so.
+  defeats it), and the spec says so. The same holds for every per-identity rule
+  (one ballot per routine, operator attempts): its strength is the cost of minting
+  an anonymous identity (§1 goal 3).
 - **Division reveal:** division D is revealed at `now` when, for every
   non-scratched routine r in D, r is **closed**, or r is **skipped** and some
   later-scheduled confirmed routine on r's mat is closed, **or** when
@@ -127,6 +135,10 @@ SQL truncates every stored time to milliseconds with `date_trunc('milliseconds',
   with integers: `floor((2·10·(35+starSum) + (10+votes)) / (2·(10+votes))) / 10`.
   Award winner per shout-out = among qualifying teams with count > 0, highest share
   `count / votes` (cross-multiplied), then votes desc, then teamId asc; `null` if none.
+  The board is **one meet-wide ranking**, not one per division: each division's teams
+  join the pool when that division is revealed (after its last routine), so the
+  board grows and can reorder during the day, and a team shown earlier can be pushed
+  off it (its recap rank changes or becomes null). This is intended.
 - **Recaps** (for the caller's *current* `homeTeamIds`, closed teams only):
   `{ teamId, votes: votes >= recapMinVotes ? votes : null, awards: {nonzero counts only},
   rank: 1-based position on the shown board or null }`. Anyone can follow any team,
@@ -223,7 +235,14 @@ judgey_private.team_tallies(meet_id, team_id pk → routines, votes int, star_su
 judgey_private.operator_codes(meet_id pk → meets, code_hash text not null)
 judgey_private.meet_operators(meet_id → meets, user_id uuid, primary key (meet_id, user_id))
 judgey_private.operator_attempts(meet_id, user_id, attempts int, primary key (meet_id, user_id))
+judgey_private.operator_failures(meet_id pk → meets, recent timestamptz[])  -- meet-wide claim failures, last minute only, no identity
 ```
+
+Review-fix migration `20261002120000_judgey_review_fixes.sql`: `routines` text columns
+reject CR/LF, `mat` is 1-16 chars, `team_name` 1-80, `gym`/`division` at most 80
+(added NOT VALID then validated; a database already holding a bad row keeps it and
+enforces new rows only, with a warning). `pg_graphql` is dropped (nothing uses
+`/graphql/v1`; it raised advisor lints 0026/0027).
 
 ## 5. Security and grants (explicit, independent of Supabase's 2026 default-privilege modes)
 
@@ -255,7 +274,9 @@ exactly these grants:
   in `coalesce(…, false)`.
 - Supabase advisor lints 0028/0029 are **expected** on exactly the RPCs listed above
   (they're intentional public endpoints that validate their inputs). Any other advisor
-  finding blocks launch.
+  finding blocks launch. Lints 0026/0027 (`pg_graphql_*_table_exposed`) do not
+  apply because the review-fix migration drops `pg_graphql` (and `graphql_public` is
+  removed from the exposed schemas); if they appear, the extension is back.
 - Tests run the whole DB suite in **both** modes: (a) no default privileges, and
   (b) legacy Supabase default grants (`grant all on tables / execute on functions to
   anon, authenticated, service_role`). In both modes they assert exact ACLs with
@@ -328,15 +349,29 @@ src → null. Unknown meet → no-op.
 - `op_set_status(p_meet text, p_team text, p_status text) → json`: operator only;
   'scheduled' or 'scratched' (else `'invalid'`; unknown routine → `'unknown-team'`);
   bumps `meets.schedule_version` when the status actually changes.
+- Review fixes (migration `20261002120000`): `claim_operator` also has a meet-wide
+  budget that new identities can't reset: after 30 wrong codes at a meet from anyone
+  in the last 60 s, every claim (right code included) is `'slow-down'` until the oldest
+  of them is a minute old. `'slow-down'` is checked after `'locked'`, counts nowhere,
+  and so ends at most a minute after guessing stops; existing operators keep their
+  rights. `op_set_start` with a non-null time on a routine that already has a start
+  (crowd or operator) returns `'already-started'`: Clear first. `tap_mat`, `op_set_start`
+  and `op_set_status` take a per-mat transaction advisory lock
+  (`judgey_private.lock_mat`) before any row lock, so the tap gate is serialized per
+  mat; `op_set_status` then locks the meets row before the routine row (the importer's
+  order, so a re-import can't deadlock with it).
 - Client operator mode is unlocked with `/?meet=<id>&op=<code>`. The code is claimed
   once, then removed from the URL (`history.replaceState`) and never stored. It shows
-  "Start now", "Clear" and "Scratch/Unscratch" on every row.
+  "Start now", "Clear" and "Scratch/Unscratch" on every row. *Client (review fixes):*
+  Start now is disabled on a routine that already has a start (`'already-started'` maps
+  to "Clear it first"); Clear, Scratch/Unscratch, and Start now on a row that is neither
+  up next nor tappable need a second "Tap again to … <Team>" within 4 s.
 
 ## 7. Import (`scripts/import-meet.ts`): never hand-write rows
 
 `node --experimental-strip-types scripts/import-meet.ts --meet <id> --name "<name>"
 --date 2026-12-05 --tz America/New_York [--venue] [--city] [--min-taps 3]
-[--operator-code <code>] [--write-ids] running-order.csv > meet.sql`
+[--operator | --operator-code <code>] [--write-ids] running-order.csv > meet.sql`
 
 - CSV columns: `mat,time,gym,team,division[,team_id]`. `time` is local wall-clock
   time (`9:04 AM` or `09:04`), converted with an `Intl.DateTimeFormat` offset lookup for
@@ -344,14 +379,27 @@ src → null. Unknown meet → no-op.
 - Validates and prints a summary to stderr: per-mat first/last time and count,
   duplicate team ids, times not increasing within a mat, times outside 06:00–22:00
   local. Any error → non-zero exit and no SQL.
+- CSV hygiene (matches the `routines` column checks): an unterminated quote is an
+  error naming the line where it opened (never "swallow the rest of the file"); a
+  CR/LF inside mat/time/gym/team/division is an error. Mat labels drop a leading
+  "Mat" (`Mat 1` → `1`; empty after that is an error) and must be ≤ 16 chars;
+  gym/team/division collapse internal whitespace and must be ≤ 80 chars. Two mats or
+  two divisions that differ only by case/spacing are an error (both spellings and
+  line numbers printed). The same gym + team listed twice is only a warning.
 - `team_id` = given, else a slug of `gym-team` (deduped). `--write-ids` writes the
   ids back into the CSV so they stay stable across revisions.
 - Emits idempotent SQL: upsert the meet (bump `schedule_version`), upsert routines
   (listed ones become `'scheduled'` again); routines present in the DB but missing
-  from the CSV → `status = 'scratched'` (never deleted). `--venue`, `--city` and
-  `--min-taps` only overwrite when given. With `--operator-code` (at least 8
-  characters): upsert `judgey_private.operator_codes`
-  using `extensions.crypt(code, extensions.gen_salt('bf'))`.
+  from the CSV → `status = 'scratched'` (never deleted). The CSV stays the truth, so
+  a re-import also un-scratches a listed routine an operator scratched; the SQL
+  `raise notice`s those team ids before the upsert, and the summary and runbook say to
+  re-scratch them or drop them from the CSV. `--venue`, `--city` and
+  `--min-taps` only overwrite when given. With `--operator` (generate a 100-bit
+  random code, printed to stderr) or `--operator-code` (at least 16 characters; refused
+  if repetitive, containing the meet id/name or a stock password fragment): upsert
+  `judgey_private.operator_codes` using `extensions.crypt(code, extensions.gen_salt('bf'))`.
+  The code's entropy is the real defense against guessing, since the per-identity
+  attempt cap resets with every new anonymous identity.
 - `--demo --start <ISO with offset>` emits the demo roster shifted to that start (for
   practice meets). It refuses an ISO string without an explicit offset. For a demo,
   times outside 06:00–22:00 are only a warning. Also `npm run import:meet -- …`.
@@ -384,6 +432,10 @@ src → null. Unknown meet → no-op.
   "on load" only once one exists. The 60 s `my_state` cadence counts from the last
   attempt (failures don't retry in a loop). The offset uses the lowest-RTT sample of
   the last 5. Before any response and with nothing cached the chip says "Connecting…".
+  *Review fixes:* a failure newer than the last success (snapshot, tap or vote RPC) is
+  "Reconnecting…" while that success is under 30 s old, never "Live"; "Updated h:mm" is
+  in server time. Sign-in runs under the cross-tab Web Lock `judgey-signin` (the session
+  is re-read inside it) and the outbox drains under `judgey-outbox-<meetId>`.
 - **Tap outbox** (device store): `{meetId, teamId, tappedAt}`, at most one per
   routine. It sends `p_age_ms = Date.now() − tappedAt` on each attempt, retries
   every 5 s plus on visible/online, and is dropped after 120 s with a visible note.
@@ -404,15 +456,21 @@ src → null. Unknown meet → no-op.
   `vote(teamId, stars, awards)` resolves with the server's reason and **rejects** when
   there's no signal; `op = { start(teamId), clear(teamId), setStatus(teamId, status) }`,
   each resolving with an error message or null.
-- Routes: the vote route is dynamic (no `DEMO_MEET` / `notFound` / `generateStaticParams`);
-  the team is resolved on the client from `MeetView.meet`. Check-in reads `?meet=`
+- Routes: every screen is static, so in-app navigation works offline: `/meet/mats?mat=`
+  and `/meet/vote?team=` read their params on the client (old `/meet/vote/<team>` links
+  redirect). The team is resolved on the client from `MeetView.meet`. In production
+  `public/sw.js` keeps an offline shell (network-first pages with a cached fallback,
+  cache-first `/_next/static/*`, never Supabase). Check-in reads `?meet=`
   (QR and group-chat links), `?src=` (first-touch, stored) and `?op=`. With no meet
   param it shows the meet this device picked before, else the demo meet (a live meet
   also links to the demo). The meet picker / `listed` flag is cut.
 - UI copy: the bell row says "Keep Judgey open for 60/20/5 heads-ups", and the
   absolute ETA is as prominent as the countdown. Skipped rows show "Not seen on the mat
   yet. Moved or scratched?". The mat chip shows "last confirmed h:mm" when the anchor is
-  more than 20 min old. A "Send to another parent" share button (`&src=share`). Favorites
+  more than 20 min old; with no confirmed start yet it says "Not started yet" (never "On
+  time") and the clock is labelled "Scheduled". A past-due ETA reads "Any minute" (up to
+  5 min) then "Running late · not tapped yet"; the banner then says "<Team> is up any
+  minute on Mat N (est. h:mm)". A "Send to another parent" share button (`&src=share`). Favorites
   shows "<Division> results land after its last routine" for pending divisions. Check-in
   privacy line: "Anonymous. No names. Deleted 30 days after the meet." (the demo meet says
   "Demo meet: nothing leaves this phone." instead). Demo clock UI only in demo mode.
@@ -426,9 +484,13 @@ src → null. Unknown meet → no-op.
 - Retention: `judgey_private.purge_meet(meet)` deletes fans/taps/ballots/visits
   for a meet, plus its operator rows (codes, operators, attempts), and returns
   `{fans, taps, ballots, visits}` counts (it keeps meets, routines, routine_starts,
-  team_tallies aggregates). The runbook
-  schedules it plus `delete from auth.users where is_anonymous and created_at < now()
-  − interval '30 days'` 30 days after the meet.
+  team_tallies aggregates). On or after T+30 the runbook runs, in **one transaction
+  and before** `purge_meet`: delete every anonymous `auth.users` row with a visits or
+  fans row at the meet, then every anonymous user created before the end of meet day
+  (local midnight after the meet's last scheduled routine, in the meet's zone), then
+  `purge_meet`, and checks that no anonymous user older than that cutoff remains. The
+  cutoff is anchored to the meet, never a rolling `now() − 30 days` (which, run once
+  on T+30, keeps everyone who signed in later in the day than the job ran).
 
 ## 10. Testing
 
@@ -454,11 +516,14 @@ src → null. Unknown meet → no-op.
 - Launch gate (after provisioning): migrations applied, advisors clean except the
   expected 0028/0029, auth config raised (`rate_limit_anonymous_users` ≥ 2000/h,
   `rate_limit_token_refresh` raised, JWT expiry ≥ 12 h, anonymous sign-ins on,
-  Turnstile on), and a two-browser live check.
+  Turnstile on), **Turnstile enforced**: an anonymous sign-in (`POST /auth/v1/signup`
+  with the publishable key and no captcha token) against the real project must be
+  refused with a captcha error (a 200 blocks launch; the local stack can't show this),
+  `pg_graphql` absent and `graphql_public` not exposed, and a two-browser live check.
 
 ## 11. Meet-day ops (summary; full steps in `docs/meet-day-runbook.md`)
 
-1. Import the running order CSV with `--operator-code`, then apply the SQL.
+1. Import the running order CSV with `--operator` (generates the operator code), then apply the SQL.
 2. Founder and one helper per mat open `/?meet=<id>&op=<code>` before doors open.
 3. Share `/?meet=<id>&src=qr` (poster) and `&src=groupchat`. Tell parents to open
    it before entering the arena.

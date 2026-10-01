@@ -6,18 +6,17 @@ import { Bell, ChevronRight, CircleSlash, HelpCircle, Megaphone, PartyPopper, Se
 import { APP_NAME } from "@/src/brand.ts";
 import { findRow, type RoutineRow } from "@/src/board.ts";
 import { dueAlerts } from "@/src/schedule.ts";
-import { driftLabel, driftTone, formatClock, formatCountdown, formatMmSs } from "@/src/format.ts";
+import { formatClock, formatMmSs } from "@/src/format.ts";
+import { etaCountdown, homeOrder, matChip } from "@/lib/eta-copy";
+import { voteHref } from "@/lib/links";
 import { shareUrl } from "@/lib/live-core";
 import type { MeetView } from "@/lib/meet-view";
 import { useMeet } from "@/lib/use-meet";
 import { MatStatus } from "./mats";
-import { checkInHref } from "./meet-shell";
+import { checkInHref, selectMeetOnClick } from "./meet-shell";
 import { Button, ButtonLink, Card, Chip, SectionTitle } from "./ui";
 
 const LEADS = [60, 20, 5];
-/** Scratched teams sink to the bottom; everyone else by estimated time. */
-const homeOrder = (a: RoutineRow, b: RoutineRow) =>
-  Number(a.eta.status === "scratched") - Number(b.eta.status === "scratched") || a.eta.estimatedAt - b.eta.estimatedAt;
 
 export function MyTeam() {
   const view = useMeet();
@@ -27,13 +26,14 @@ export function MyTeam() {
     .filter((r): r is RoutineRow => !!r)
     .sort(homeOrder);
 
-  const votable = boards
-    .flatMap((b) => b.rows)
-    .filter((r) => r.votingOpen && !homeTeamIds.includes(r.team.id))
+  const open = boards.flatMap((b) => b.rows).filter((r) => r.votingOpen);
+  const votable = open
+    .filter((r) => !homeTeamIds.includes(r.team.id))
     .sort((a, b) => (b.startedAt ?? 0) - (a.startedAt ?? 0));
 
   return (
     <>
+      <h1 className="sr-only">My Team</h1>
       {home.length === 0 ? (
         <Card>
           <p className="font-display text-3xl uppercase">Here to cheer</p>
@@ -52,6 +52,8 @@ export function MyTeam() {
       <ShareButton view={view} />
       <Link
         href={checkInHref(view)}
+        prefetch={false}
+        onClick={selectMeetOnClick(view.meet.id)}
         className="flex h-12 items-center justify-center gap-1.5 text-sm font-bold text-muted underline-offset-4 hover:underline"
       >
         <Users size={16} /> Change teams
@@ -59,7 +61,11 @@ export function MyTeam() {
 
       <SectionTitle>Voting open now</SectionTitle>
       {votable.length === 0 ? (
-        <p className="text-sm text-muted">Nobody&apos;s on the mat this second. Hang tight!</p>
+        <p className="text-sm text-muted">
+          {open.length > 0
+            ? "No other teams to vote on right now. Cheer loud!"
+            : "Nobody's on the mat this second. Hang tight!"}
+        </p>
       ) : (
         <div className="space-y-2">
           {votable.map((r) => (
@@ -92,16 +98,24 @@ export function MyTeam() {
 }
 
 function EtaCard({ row, view }: { row: RoutineRow; view: MeetView }) {
-  const { now, meet } = view;
+  const { now, meet, boards } = view;
   const { team, eta, slot } = row;
   const sent = dueAlerts(eta, now);
   const scheduled = formatClock(eta.scheduledAt, meet.timeZone);
+  // No confirmed start on this mat yet: the time is just the schedule, not an "On time" estimate.
+  const confirmed = boards.find((b) => b.mat === slot.mat)?.confirmed ?? false;
+  const chip = matChip({ confirmed, driftMinutes: eta.driftMinutes });
+  const countdown = etaCountdown(eta.estimatedAt, now);
 
   return (
-    <Card className={eta.status === "on-mat" ? "pulse-ring border-mat" : eta.status === "scratched" ? "opacity-70" : ""}>
+    <Card
+      className={
+        eta.status === "on-mat" ? "pulse-ring border-mat" : eta.status === "scratched" ? "bg-ink!" : ""
+      }
+    >
       <div className="flex flex-wrap items-center gap-2">
         <Chip tone="mat">Mat {slot.mat}</Chip>
-        {eta.status === "upcoming" && <Chip tone={driftTone(eta.driftMinutes)}>{driftLabel(eta.driftMinutes)}</Chip>}
+        {eta.status === "upcoming" && <Chip tone={chip.tone}>{chip.label}</Chip>}
         {eta.status === "scratched" && <Chip tone="late">Scratched</Chip>}
         <Chip>{team.division}</Chip>
       </div>
@@ -112,13 +126,21 @@ function EtaCard({ row, view }: { row: RoutineRow; view: MeetView }) {
         <>
           <div className="mt-4 grid gap-3">
             <div>
-              <p className="text-xs font-bold tracking-[0.18em] text-muted uppercase">Going on in</p>
-              <p className="font-display text-6xl leading-none text-mat uppercase tabular-nums">
-                {formatCountdown(eta.estimatedAt - now)}
+              <p className="text-xs font-bold tracking-[0.18em] text-muted uppercase">
+                {countdown.overdue ? "Going on" : "Going on in"}
+              </p>
+              <p
+                className={`font-display leading-none text-mat uppercase tabular-nums ${
+                  countdown.text.length > 12 ? "text-4xl" : "text-6xl"
+                }`}
+              >
+                {countdown.text}
               </p>
             </div>
             <div>
-              <p className="text-xs font-bold tracking-[0.18em] text-muted uppercase">Around</p>
+              <p className="text-xs font-bold tracking-[0.18em] text-muted uppercase">
+                {confirmed ? "Around" : "Scheduled"}
+              </p>
               <p className="font-display text-6xl leading-none uppercase tabular-nums">
                 {formatClock(eta.estimatedAt, meet.timeZone)}
               </p>
@@ -225,13 +247,16 @@ function VoteRow({ row, now, voted }: { row: RoutineRow; now: number; voted: boo
       <div className="min-w-0 flex-1">
         <p className="truncate font-bold">{row.team.name}</p>
         <p className="truncate text-xs text-muted">
-          {row.team.gym} · Mat {row.slot.mat} · closes in {formatMmSs((row.votingClosesAt ?? now) - now)}
+          {row.team.gym} · Mat {row.slot.mat}
+        </p>
+        <p className="text-xs font-bold whitespace-nowrap text-bow tabular-nums">
+          Closes in {formatMmSs((row.votingClosesAt ?? now) - now)}
         </p>
       </div>
       {voted ? (
         <Chip tone="go">Voted</Chip>
       ) : (
-        <ButtonLink href={`/meet/vote/${row.team.id}`} className="h-12 px-4 text-sm">
+        <ButtonLink href={voteHref(row.team.id)} className="h-12 px-4 text-sm">
           Vote
         </ButtonLink>
       )}

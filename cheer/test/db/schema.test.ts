@@ -31,6 +31,33 @@ dbSuite("schema", (ctx) => {
     await fails(routineSql, [meet.id, "b", "done"]);
     await db.sql(routineSql, [meet.id, "x".repeat(80), "scratched"]);
 
+    // Text columns (review fix): no CR/LF, mat 1-16 chars, team_name 1-80, gym and division at most 80.
+    const textSql = `insert into public.routines (meet_id, team_id, team_name, gym, division, mat, scheduled_at)
+                     values ($1, $2, $3, $4, $5, $6, now())`;
+    const text = (o: { name?: string; gym?: string; division?: string; mat?: string }) => [
+      meet.id,
+      `txt-${Math.random().toString(36).slice(2, 10)}`,
+      o.name ?? "Team",
+      o.gym ?? "Gym",
+      o.division ?? "Div",
+      o.mat ?? "1",
+    ];
+    for (const bad of ["Mat\n1", "1\r", "", "x".repeat(17)]) await fails(textSql, text({ mat: bad }));
+    for (const bad of ["Royals\nSenior", "Royals\r", "", "x".repeat(81)]) await fails(textSql, text({ name: bad }));
+    for (const bad of ["Gym\r\nB", "x".repeat(81)]) await fails(textSql, text({ gym: bad }));
+    for (const bad of ["Senior\nCoed 5", "x".repeat(81)]) await fails(textSql, text({ division: bad }));
+    await db.sql(textSql, text({ mat: "x".repeat(16), name: "x".repeat(80), gym: "x".repeat(80), division: "x".repeat(80) }));
+    await db.sql(textSql, text({ gym: "", division: "", name: "Élite\tTab ok" }));
+    const unvalidated = await db.sql(
+      `select conname from pg_constraint where conrelid = 'public.routines'::regclass and contype = 'c' and not convalidated`,
+    );
+    assert.deepEqual(unvalidated, [], "the shape constraints are validated on a clean database");
+    // An update can't sneak a newline in either.
+    await assert.rejects(
+      db.sql("update public.routines set division = 'A' || chr(10) || 'B' where meet_id = $1 and team_id = 'a'", [meet.id]),
+      pgCode("23514"),
+    );
+
     await fails(
       `insert into public.routine_starts (meet_id, team_id, started_at, source) values ($1, 'a', now(), 'robot')`,
       [meet.id],
@@ -94,6 +121,7 @@ dbSuite("schema", (ctx) => {
       "judgey_private.operator_codes",
       "judgey_private.meet_operators",
       "judgey_private.operator_attempts",
+      "judgey_private.operator_failures",
     ];
     const counts = async (): Promise<Record<string, number>> =>
       Object.fromEntries(

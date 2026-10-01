@@ -34,6 +34,8 @@ export interface MatBoard {
   driftMinutes: number;
   /** The anchor's start: lets the UI say "last confirmed 10:42" when it gets old. */
   lastConfirmedAt?: Timestamp;
+  /** The mat has a confirmed start (an anchor). Without one, driftMinutes is 0 by definition, not "on time". */
+  confirmed: boolean;
   /** Every routine on the mat in scheduled order, scratched ones included. */
   rows: RoutineRow[];
   /** The on-mat routine that started last. */
@@ -72,6 +74,7 @@ export function buildBoards(meet: Meet, starts: Starts, now: Timestamp): MatBoar
       mat,
       driftMinutes: roundMinutes(matDrift(meet, starts, mat)),
       lastConfirmedAt: anchor && starts.get(anchor.teamId),
+      confirmed: anchor !== undefined,
       rows,
       onMat,
       upNext: rows.find((r) => r.eta.status === "upcoming"),

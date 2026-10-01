@@ -17,11 +17,11 @@ stands.
 
 | Route | What it does |
 |---|---|
-| `/` | Check-in: "Which squad are you here to see?" (or "I'm just here to cheer"). Reads `?meet=` (QR / group-chat links), `?src=` (first touch) and `?op=` (operator code, claimed once and stripped from the URL). No `?meet=`: the meet this phone picked before, else the demo |
-| `/meet` | My Team: ETA countdown and the absolute time, drift, 60/20/5-min heads-ups, skipped/scratched notices, "Send to another parent" share link, open votes, mats at a glance |
-| `/meet/mats` | Running order per mat; "&lt;Team&gt; just took the mat" tap (with an offline outbox), "Someone else on the mat?" for swaps, "last confirmed h:mm" when a mat goes quiet; Start now / Clear / Scratch for operators |
-| `/meet/vote/[teamId]` | 1–5 stars + shout-outs; own-team block; voting window countdown. Dynamic route: the team is resolved on the client |
-| `/meet/favorites` | Crowd Favorites (top half, max 5) per revealed division, shout-out winners, private recaps for your teams |
+| `/` | Check-in: "Which squad are you here to see?" (or "I'm just here to cheer"). Reads `?meet=` (QR / group-chat links), `?src=` (first touch) and `?op=` (operator code, claimed once and stripped from the URL). No `?meet=`: the meet this phone picked before, else the demo. With `?meet=` the hero is compact so the search and first teams sit above the fold |
+| `/meet` | My Team: cards ordered on the mat → upcoming → skipped → done → scratched; ETA countdown ("Any minute", then "Running late · not tapped yet" once past) and the absolute time, drift ("Not started yet" before a mat's first confirmed start), 60/20/5-min heads-ups, skipped/scratched notices, "Send to another parent" share link, open votes, mats at a glance |
+| `/meet/mats?mat=<n>` | Running order per mat; "&lt;Team&gt; just took the mat" tap (with an offline outbox) placed right above the on-mat / up-next rows, "Someone else on the mat?" for swaps, "last confirmed h:mm" when a mat goes quiet; Start now / Clear / Scratch for operators (Start now only on a routine with no start; Clear, Scratch and off-cue Start now ask "Tap again to …"). Static: `?mat=` is read on the client |
+| `/meet/vote?team=<id>` | 1–5 stars + shout-outs; own-team block; scratched notice; voting window countdown. Static: the team is resolved on the client. Old `/meet/vote/<id>` links redirect here |
+| `/meet/favorites` | Crowd Favorites: one meet-wide board (top half of qualifying teams, max 5); each division's teams join when its last routine wraps, so the board can reorder during the day. Shout-out winners, private recaps for your teams |
 
 ## Demo and live mode
 
@@ -54,6 +54,14 @@ Operators open `/?meet=<id>&op=<code>`. Contract: `docs/backend-spec.md`.
   - `demo/`: fictional meet, simulated crowd, demo clock
 - `lib/`: client store + `useMeet()` hook (merges device state with the crowd)
 - `components/`, `app/`: Next.js 16 App Router screens
+- `supabase/migrations/`: the live-mode database (tables, RLS, RPCs); `supabase/local/`
+  runs a Supabase-compatible stack for rehearsal; `supabase/tests/` bootstraps the DB suite
+- `scripts/import-meet.ts` (+ `import-meet-lib.ts`): running-order CSV or demo roster →
+  validated, idempotent SQL; `--operator` generates the operator code
+- `test/`: domain and importer tests (`npm test`); `test/db/`: the DB suite incl. TS/SQL parity
+- `docs/backend-spec.md`: the live-mode contract; `docs/meet-day-runbook.md`: provisioning,
+  Vercel, launch gate, import, meet day, ballot-stuffing check, retention
+- `next.config.ts` pins the workspace root to `cheer/` (the repo root has its own lockfile)
 
 ## Dev
 
@@ -68,3 +76,11 @@ npm run typecheck
 npm run lint
 npm run build
 ```
+
+## Offline
+
+Every screen is a static page, so in-app navigation keeps working with no signal
+once the app has loaded. In production `public/sw.js` (registered by
+`components/service-worker.tsx`) keeps an offline app shell: network-first pages
+with a cached fallback, cache-first `/_next/static/*`, and never any Supabase call.
+A reload with no signal opens on the last known times from `judgey_live_<meet>`.

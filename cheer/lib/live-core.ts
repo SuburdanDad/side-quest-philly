@@ -82,7 +82,15 @@ export interface BallotResult {
   ok: boolean;
   reason?: BallotReason;
 }
-export type OperatorReason = "bad-code" | "locked" | "unknown-meet" | "not-operator" | "unknown-team" | "invalid";
+export type OperatorReason =
+  | "bad-code"
+  | "locked"
+  | "slow-down"
+  | "unknown-meet"
+  | "not-operator"
+  | "unknown-team"
+  | "already-started"
+  | "invalid";
 export interface OperatorResult {
   ok: boolean;
   reason?: OperatorReason;
@@ -224,7 +232,16 @@ const reasonOf = <R extends string>(o: Json, known: readonly R[], fallback: R): 
 const CHECK_IN_REASONS = ["too-many", "unknown-team", "unknown-meet"] as const;
 const TAP_REASONS = ["unknown-team", "scratched", "too-early", "not-next", "too-soon", "already-confirmed"] as const;
 const BALLOT_REASONS = ["not-checked-in", "own-team", "window-closed", "already-voted", "invalid"] as const;
-const OPERATOR_REASONS = ["bad-code", "locked", "unknown-meet", "not-operator", "unknown-team", "invalid"] as const;
+const OPERATOR_REASONS = [
+  "bad-code",
+  "locked",
+  "slow-down",
+  "unknown-meet",
+  "not-operator",
+  "unknown-team",
+  "already-started",
+  "invalid",
+] as const;
 
 export function parseCheckIn(x: unknown): CheckInResult {
   const o = obj(x, "check_in");
@@ -446,21 +463,32 @@ export type Freshness =
   | { kind: "demo" }
   | { kind: "connecting" }
   | { kind: "live" }
+  | { kind: "reconnecting" }
   | { kind: "updated"; at: Timestamp }
   | { kind: "offline"; at: Timestamp | null };
 
 /**
- * "Live" while the last good snapshot is under 30 s old; after that "Updated
- * h:mm", or "Offline" if the latest attempt failed. Times are device time.
+ * "Live" while the last good snapshot is under 30 s old and nothing has failed
+ * since; a newer failure inside those 30 s is "Reconnecting…", after them
+ * "Offline". Otherwise "Updated h:mm". `at` is in server time (device time +
+ * `offset`), like every other clock on screen.
  */
-export function freshness(lastSuccessAt: Timestamp, lastFailureAt: Timestamp, realNow: Timestamp): Freshness {
-  if (lastSuccessAt > 0 && realNow - lastSuccessAt < LIVE_FRESH_MS) return { kind: "live" };
-  if (lastFailureAt > lastSuccessAt) return { kind: "offline", at: lastSuccessAt || null };
+export function freshness(
+  lastSuccessAt: Timestamp,
+  lastFailureAt: Timestamp,
+  realNow: Timestamp,
+  offset = 0,
+): Freshness {
+  const recent = lastSuccessAt > 0 && realNow - lastSuccessAt < LIVE_FRESH_MS;
+  const failedSince = lastFailureAt > lastSuccessAt;
+  if (recent) return failedSince ? { kind: "reconnecting" } : { kind: "live" };
+  if (failedSince) return { kind: "offline", at: lastSuccessAt ? lastSuccessAt + offset : null };
   if (lastSuccessAt === 0) return { kind: "connecting" };
-  return { kind: "updated", at: lastSuccessAt };
+  return { kind: "updated", at: lastSuccessAt + offset };
 }
 
-export function freshnessLabel(f: Freshness, timeZone: string, offset = 0): string {
+/** `at` is already server time (see freshness()). */
+export function freshnessLabel(f: Freshness, timeZone: string): string {
   switch (f.kind) {
     case "demo":
       return "Demo";
@@ -468,8 +496,10 @@ export function freshnessLabel(f: Freshness, timeZone: string, offset = 0): stri
       return "Connecting…";
     case "live":
       return "Live";
+    case "reconnecting":
+      return "Reconnecting…";
     case "updated":
-      return `Updated ${formatClock(f.at + offset, timeZone)}`;
+      return `Updated ${formatClock(f.at, timeZone)}`;
     case "offline":
       return "Offline · last known times";
   }
@@ -626,9 +656,11 @@ export const CHECK_IN_MESSAGES: Record<CheckInReason, string> = {
 export const OPERATOR_MESSAGES: Record<OperatorReason, string> = {
   "bad-code": "That operator code didn't work.",
   locked: "Too many tries. Operator mode is locked on this phone.",
+  "slow-down": "Too many wrong codes at this meet just now. Try again in a minute.",
   "unknown-meet": "We couldn't find that meet.",
   "not-operator": "Operator mode isn't on for this phone.",
   "unknown-team": "That team isn't on this running order.",
+  "already-started": "That routine already has a start. Clear it first, then Start now.",
   invalid: "That didn't work. Try again.",
 };
 

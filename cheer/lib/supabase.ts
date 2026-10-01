@@ -126,7 +126,19 @@ function retryable(e: unknown): boolean {
   return typeof status !== "number" || status === 0 || status === 429 || status >= 500;
 }
 
+/**
+ * One sign-in at a time across every tab of this origin: inside the Web Lock
+ * getSession() re-reads `judgey_auth` from storage, so a second tab picks up
+ * the identity the first one just minted instead of creating another (two
+ * identities would let one press send the shared outbox's tap twice).
+ */
 async function signIn(): Promise<string> {
+  const locks = typeof navigator !== "undefined" ? navigator.locks : undefined;
+  if (!locks) return signInUnlocked();
+  return locks.request("judgey-signin", signInUnlocked);
+}
+
+async function signInUnlocked(): Promise<string> {
   const client = await authedClient();
   for (let attempt = 0; ; attempt++) {
     let error: unknown;

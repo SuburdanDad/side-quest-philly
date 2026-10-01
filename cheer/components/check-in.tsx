@@ -13,6 +13,7 @@ import { claimOperator } from "@/lib/sources/live";
 import { deviceActions, getDeviceState, useDeviceState } from "@/lib/store";
 import { isLiveEnabled } from "@/lib/supabase";
 import { useMeet } from "@/lib/use-meet";
+import { selectMeetOnClick } from "./meet-shell";
 import { Button, ButtonLink, Card, Chip, Skeleton } from "./ui";
 
 /** "/" reads ?meet= (QR and group-chat links), ?src= (first touch) and ?op= (operator code). */
@@ -59,7 +60,7 @@ function CheckInScreen() {
   const fellBack = meetParam !== null && meetParam !== DEMO_MEET.id && target === DEMO_MEET.id;
 
   return (
-    <CheckInFrame loading={!showing && !view.notFound}>
+    <CheckInFrame loading={!showing && !view.notFound} compact={meetParam !== null}>
       {opNote && (
         <Card className={`mt-6 ${opNote.ok ? "border-gold/50" : "border-late/50"}`}>
           <p className="flex items-center gap-2 text-sm font-bold">
@@ -78,12 +79,18 @@ function CheckInScreen() {
         <Card className="mt-6">
           <p className="font-display text-3xl uppercase">Meet not found</p>
           <p className="mt-1 text-sm text-muted">That link doesn&apos;t match a meet we know. Check it, or look around the demo.</p>
-          <ButtonLink href={`/?meet=${DEMO_MEET.id}`} variant="ghost" className="mt-4 w-full">
+          <ButtonLink
+            href={`/?meet=${DEMO_MEET.id}`}
+            prefetch={false}
+            onClick={selectMeetOnClick(DEMO_MEET.id)}
+            variant="ghost"
+            className="mt-4 w-full"
+          >
             Try the demo meet
           </ButtonLink>
         </Card>
       ) : (
-        showing && <Picker key={target} />
+        showing && <Picker key={target} compact={meetParam !== null} />
       )}
       {!showing && !view.notFound && view.mode === "live" && (
         <p className="mt-6 text-center text-sm text-muted">
@@ -94,15 +101,33 @@ function CheckInScreen() {
   );
 }
 
-function CheckInFrame({ loading = false, children }: { loading?: boolean; children?: React.ReactNode }) {
+/**
+ * `compact`: opened from a QR / group-chat link (?meet=). The parent came to find
+ * a team, so a small wordmark keeps the search and the first teams above the fold.
+ */
+function CheckInFrame({
+  loading = false,
+  compact = false,
+  children,
+}: {
+  loading?: boolean;
+  compact?: boolean;
+  children?: React.ReactNode;
+}) {
   return (
-    <main className="mx-auto max-w-[480px] px-4 pt-[max(2.5rem,env(safe-area-inset-top))] pb-48">
-      <header>
-        <h1 className="font-display text-7xl leading-none tracking-tight uppercase">
+    <main
+      className={`mx-auto max-w-[480px] px-4 pb-48 ${
+        compact ? "pt-[max(1rem,env(safe-area-inset-top))]" : "pt-[max(2.5rem,env(safe-area-inset-top))]"
+      }`}
+    >
+      <header className={compact ? "flex items-baseline justify-between gap-3" : ""}>
+        <h1
+          className={`font-display leading-none tracking-tight uppercase ${compact ? "text-4xl" : "text-7xl"}`}
+        >
           {APP_NAME}
           <span className="text-bow">.</span>
         </h1>
-        <p className="mt-2 text-lg text-muted">{TAGLINE}</p>
+        <p className={compact ? "truncate text-sm text-muted" : "mt-2 text-lg text-muted"}>{TAGLINE}</p>
       </header>
       {children}
       {loading && (
@@ -118,8 +143,9 @@ function CheckInFrame({ loading = false, children }: { loading?: boolean; childr
   );
 }
 
-function Picker() {
+function Picker({ compact = false }: { compact?: boolean }) {
   const router = useRouter();
+  const searchRef = useRef<HTMLInputElement>(null);
   const { meet, mode, checkedIn, homeTeamIds, actions } = useMeet();
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<string[] | null>(null);
@@ -152,6 +178,14 @@ function Picker() {
     else if (!full) setPicked([...selected, id]);
   };
 
+  /** Nothing picked yet: the big button takes you to the search instead of doing nothing. */
+  const findTeam = () => {
+    const input = searchRef.current;
+    if (!input) return;
+    (input.closest("label") ?? input).scrollIntoView({ block: "start", behavior: "smooth" });
+    input.focus({ preventScroll: true });
+  };
+
   const go = (ids: string[]) => {
     actions.checkIn(ids); // local-first: never waits on the network
     router.push("/meet");
@@ -168,7 +202,7 @@ function Picker() {
         </Card>
       )}
 
-      <Card className="mt-6">
+      <Card className={compact ? "mt-4 p-4" : "mt-6"}>
         <div className="flex flex-wrap items-center gap-2">
           {mode === "demo" ? (
             <>
@@ -179,20 +213,31 @@ function Picker() {
             <Chip tone="go">Live meet</Chip>
           )}
         </div>
-        <p className="mt-3 font-display text-3xl leading-tight uppercase">{meet.name}</p>
+        <p className={`font-display leading-tight uppercase ${compact ? "mt-2 text-2xl" : "mt-3 text-3xl"}`}>
+          {meet.name}
+        </p>
         <p className="mt-1 flex items-center gap-1.5 text-sm text-muted">
           <MapPin size={14} className="shrink-0" /> {[meet.venue, meet.city, meetDate].filter(Boolean).join(" · ")}
         </p>
       </Card>
 
-      <h2 className="mt-8 font-display text-3xl uppercase">Which squad are you here to see?</h2>
-      <p className="mt-2 text-sm text-muted">
+      <h2 className={`font-display uppercase ${compact ? "mt-5 text-2xl" : "mt-8 text-3xl"}`}>
+        Which squad are you here to see?
+      </h2>
+      <p className={`text-sm text-muted ${compact ? "mt-1" : "mt-2"}`}>
         Pick as many as you like (siblings count). We&apos;ll tell you exactly when they go on.
       </p>
 
-      <label className="mt-4 flex h-12 items-center gap-2 rounded-2xl border border-line bg-surface-2 px-4">
-        <Search size={18} className="text-muted" />
+      <label
+        className={`flex h-12 scroll-mt-24 items-center gap-2 rounded-2xl border border-line bg-surface-2 px-4 focus-within:border-bow focus-within:ring-2 focus-within:ring-bow/40 ${
+          compact ? "mt-3" : "mt-4"
+        }`}
+      >
+        <Search size={18} className="text-muted" aria-hidden />
         <input
+          ref={searchRef}
+          type="search"
+          aria-label="Search teams"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search gym, team or division"
@@ -238,7 +283,13 @@ function Picker() {
       </div>
 
       {mode === "live" && (
-        <ButtonLink href={`/?meet=${DEMO_MEET.id}`} variant="ghost" className="mt-8 w-full text-sm">
+        <ButtonLink
+          href={`/?meet=${DEMO_MEET.id}`}
+          prefetch={false}
+          onClick={selectMeetOnClick(DEMO_MEET.id)}
+          variant="ghost"
+          className="mt-8 w-full text-sm"
+        >
           Just looking? Try the demo meet
         </ButtonLink>
       )}
@@ -253,11 +304,15 @@ function Picker() {
             <ShieldCheck size={14} className="mt-px shrink-0 text-go" />
             {mode === "live" ? "Anonymous. No names. Deleted 30 days after the meet." : "Demo meet: nothing leaves this phone."}
           </p>
-          <Button className="w-full" disabled={selected.length === 0} onClick={() => go(selected)}>
-            {selected.length === 0
-              ? "Pick your team"
-              : `Let's go${selected.length > 1 ? ` (${selected.length} teams)` : ""}`}
-          </Button>
+          {selected.length === 0 ? (
+            <Button className="w-full" onClick={findTeam}>
+              Find your team ↓
+            </Button>
+          ) : (
+            <Button className="w-full" onClick={() => go(selected)}>
+              {`Let's go${selected.length > 1 ? ` (${selected.length} teams)` : ""}`}
+            </Button>
+          )}
           <button
             onClick={() => go([])}
             className="mt-1 h-12 w-full text-sm font-medium text-muted underline-offset-4 hover:underline"

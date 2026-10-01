@@ -2,6 +2,7 @@
 // wall-clock → UTC with an Intl offset lookup, validation, slug ids, and the
 // idempotent SQL. No I/O here; scripts/import-meet.ts does the files and exit codes.
 
+import { randomBytes } from "node:crypto";
 import type { Meet } from "../src/types.ts";
 
 const MINUTE = 60_000;
@@ -12,6 +13,11 @@ const REQUIRED = ["mat", "time", "gym", "team", "division"] as const;
 /** Routines outside this local window are almost always an AM/PM typo. */
 const EARLIEST = 6 * 60;
 const LATEST = 22 * 60;
+/** Column lengths the database and UI expect (mat chips are tiny). */
+const MAX_MAT = 16;
+const MAX_TEXT = 80;
+/** Operator codes are claimable by anyone with a fresh anonymous identity, so they must be unguessable. */
+export const MIN_OPERATOR_CODE = 16;
 
 // ---------------------------------------------------------------------------
 // CSV (RFC 4180: quoted fields, "" escapes, newlines inside quotes, CRLF, BOM)
@@ -22,6 +28,8 @@ export interface Csv {
   lines: number[];
   bom: boolean;
   eol: "\r\n" | "\n";
+  /** Set when the text is not valid CSV (e.g. a quote that is never closed). */
+  error?: string;
 }
 
 export function parseCsv(text: string): Csv {
@@ -36,6 +44,7 @@ export function parseCsv(text: string): Csv {
   let wasQuoted = false; // this field had quotes (keep its spaces)
   let line = 1;
   let rowLine = 1;
+  let quoteLine = 1; // where the open quoted field started
 
   const endField = () => {
     row.push(wasQuoted ? field : field.trim());
@@ -67,6 +76,7 @@ export function parseCsv(text: string): Csv {
     } else if (ch === '"' && field.trim() === "") {
       quoted = true;
       wasQuoted = true;
+      quoteLine = line;
       field = "";
     } else if (wasQuoted && (ch === " " || ch === "\t")) {
       // spaces between a closing quote and the next comma
@@ -80,6 +90,16 @@ export function parseCsv(text: string): Csv {
     } else {
       field += ch;
     }
+  }
+  if (quoted) {
+    // Everything after the open quote would silently become one field: refuse instead.
+    return {
+      rows,
+      lines,
+      bom,
+      eol,
+      error: `line ${quoteLine}: unterminated quote (") — every row after it would be swallowed into one field`,
+    };
   }
   if (field !== "" || row.length > 0 || wasQuoted) endRow();
   return { rows, lines, bom, eol };
@@ -280,6 +300,37 @@ export interface CsvOptions {
 const natural = new Intl.Collator("en", { numeric: true, sensitivity: "base" });
 const sortMats = (mats: Iterable<string>) => [...new Set(mats)].sort((a, b) => natural.compare(a, b) || (a < b ? -1 : 1));
 
+const CODE_ALPHABET = "abcdefghijkmnpqrstuvwxyz23456789"; // 32 symbols, no l/o/0/1
+const WEAK_PARTS = ["password", "passw0rd", "qwerty", "letmein", "123456", "abcdef", "judgey", "cheer"];
+
+/**
+ * A fresh operator code: 20 random base32 symbols (100 bits) in groups of five,
+ * e.g. "k7m2q-xh9ra-4tpwz-c3ndv". Brute force is hopeless no matter how many
+ * anonymous identities an attacker mints (claim_operator's 10-try cap is per identity).
+ */
+export function generateOperatorCode(bytes: (n: number) => Uint8Array = randomBytes): string {
+  const raw = bytes(20);
+  let code = "";
+  for (let i = 0; i < 20; i++) code += (i > 0 && i % 5 === 0 ? "-" : "") + CODE_ALPHABET[raw[i] & 31];
+  return code;
+}
+
+/** Why a supplied operator code is too weak to protect a meet, or null if it is fine. */
+export function operatorCodeWeakness(code: string, meet?: Pick<MeetInfo, "id" | "name">): string | null {
+  if (code.length < MIN_OPERATOR_CODE) {
+    return `must be at least ${MIN_OPERATOR_CODE} characters (anyone with throwaway identities can guess a short one)`;
+  }
+  if (/\s/.test(code)) return "must not contain spaces (it goes in a URL)";
+  const lower = code.toLowerCase();
+  if (new Set(lower).size < 8) return "is too repetitive (fewer than 8 different characters)";
+  const part = WEAK_PARTS.find((w) => lower.includes(w));
+  if (part) return `contains the guessable "${part}"`;
+  const squash = (t: string) => t.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const meetWords = [meet?.id ?? "", meet?.name ?? ""].map(squash).filter((w) => w.length >= 4);
+  if (meetWords.some((w) => squash(code).includes(w))) return "contains the meet id or name";
+  return null;
+}
+
 function checkMeet(meet: MeetInfo, operatorCode: string | undefined, errors: string[]): void {
   if (!MEET_ID.test(meet.id)) errors.push(`--meet "${meet.id}" must match ${MEET_ID} (lowercase letters, digits, '-')`);
   if (!meet.name.trim()) errors.push("--name is required");
@@ -287,8 +338,9 @@ function checkMeet(meet: MeetInfo, operatorCode: string | undefined, errors: str
   if (meet.minTaps !== undefined && !(Number.isInteger(meet.minTaps) && meet.minTaps >= 2 && meet.minTaps <= 5)) {
     errors.push("--min-taps must be an integer from 2 to 5");
   }
-  if (operatorCode !== undefined && operatorCode.length < 8) {
-    errors.push("--operator-code must be at least 8 characters (anyone can guess a short one)");
+  if (operatorCode !== undefined) {
+    const weak = operatorCodeWeakness(operatorCode, meet);
+    if (weak) errors.push(`--operator-code ${weak}; omit it and pass --operator to generate a strong one`);
   }
   const text = [meet.id, meet.name, meet.venue ?? "", meet.city ?? "", operatorCode ?? ""].join("");
   if (text.includes("\u0000")) errors.push("arguments must not contain NUL characters");
@@ -312,8 +364,23 @@ function summarize(plan: ImportPlan, extra: string[] = []): string[] {
   const divisions = new Map<string, number>();
   for (const r of live) divisions.set(r.division, (divisions.get(r.division) ?? 0) + 1);
   out.push(`  Divisions: ${[...divisions].map(([d, n]) => `${d} (${n})`).join(", ")}`);
+  out.push(
+    "  Re-import note: every routine listed here becomes 'scheduled' again, even one an operator scratched today. " +
+      "psql prints a NOTICE naming them; re-scratch them in the app or remove them from the CSV first.",
+  );
   return out.concat(extra);
 }
+
+interface Seen {
+  text: string;
+  line: number;
+}
+/** Trim and collapse runs of whitespace (incl. NBSP) to one space. */
+const collapse = (s: string) => s.replace(/\s+/g, " ").trim();
+/** Case- and spacing-insensitive key for spotting near-duplicate spellings. */
+const fold = (s: string) => collapse(s).toLowerCase();
+/** "Mat 1" / "MAT  1" / "mat1" → "1" (the app prints "Mat" itself). */
+export const matLabel = (s: string) => collapse(s).replace(/^mat(?![a-z])\s*/i, "");
 
 /** Running-order CSV (mat,time,gym,team,division[,team_id]) → validated plan. */
 export function planFromCsv(text: string, opts: CsvOptions): PlanResult {
@@ -325,6 +392,7 @@ export function planFromCsv(text: string, opts: CsvOptions): PlanResult {
   if (text.includes("\u0000")) errors.push("the CSV contains NUL characters");
 
   const csv = parseCsv(text);
+  if (csv.error) return { errors: [...errors, csv.error], warnings, summary: [] };
   if (csv.rows.length === 0) return { errors: [...errors, "the CSV is empty"], warnings, summary: [] };
   const header = csv.rows[0].map((h) => h.trim().toLowerCase().replace(/[\s-]+/g, "_"));
   const col = (name: string) => header.indexOf(name);
@@ -351,6 +419,8 @@ export function planFromCsv(text: string, opts: CsvOptions): PlanResult {
   const routines: PlannedRoutine[] = [];
   const ids: string[] = [];
   const lastOnMat = new Map<string, { at: number; line: number }>();
+  const spellings = { mat: new Map<string, Seen>(), division: new Map<string, Seen>() };
+  const teamsSeen = new Map<string, Seen>();
   let generated = 0;
   for (const [k, row] of body.entries()) {
     const line = csv.lines[k + 1];
@@ -359,14 +429,40 @@ export function planFromCsv(text: string, opts: CsvOptions): PlanResult {
       ids.push("");
       continue;
     }
-    const get = (name: string) => (row[col(name)] ?? "").trim();
-    const [mat, time, gym, team, division] = REQUIRED.map(get);
-    const blank = REQUIRED.filter((name) => get(name) === "");
+    const raw = (name: string) => row[col(name)] ?? "";
+    const multiline = REQUIRED.filter((name) => /[\r\n]/.test(raw(name)));
+    if (multiline.length) {
+      errors.push(`line ${line}: ${multiline.join(", ")} must not contain a line break (a stray quote?)`);
+      ids.push("");
+      continue;
+    }
+    const time = raw("time").trim();
+    const [gym, team, division] = (["gym", "team", "division"] as const).map((name) => collapse(raw(name)));
+    const mat = matLabel(raw("mat"));
+    const blank = REQUIRED.filter((name) => collapse(raw(name)) === "");
     if (blank.length) {
       errors.push(`line ${line}: empty ${blank.join(", ")}`);
       ids.push("");
       continue;
     }
+    if (mat === "") errors.push(`line ${line}: mat "${collapse(raw("mat"))}" has no label after dropping "Mat" (use 1, 2, A…)`);
+    if (mat.length > MAX_MAT) errors.push(`line ${line}: mat "${mat}" is longer than ${MAX_MAT} characters`);
+    for (const [name, value] of [["gym", gym], ["team", team], ["division", division]] as const) {
+      if (value.length > MAX_TEXT) errors.push(`line ${line}: ${name} is longer than ${MAX_TEXT} characters ("${value.slice(0, 24)}…")`);
+    }
+    for (const [name, value] of [["mat", mat], ["division", division]] as const) {
+      if (value === "") continue;
+      const key = fold(value);
+      const seen = spellings[name].get(key);
+      if (!seen) spellings[name].set(key, { text: value, line });
+      else if (seen.text !== value) {
+        errors.push(`line ${line}: ${name} "${value}" differs only in case/spacing from "${seen.text}" (line ${seen.line}); pick one spelling`);
+      }
+    }
+    const teamKey = `${fold(gym)}\u0000${fold(team)}`;
+    const dup = teamsSeen.get(teamKey);
+    if (dup) warnings.push(`line ${line}: ${gym} ${team} is also on line ${dup.line} (fine if they compete twice; otherwise a duplicate row)`);
+    else teamsSeen.set(teamKey, { text: team, line });
     let teamId = idCol >= 0 ? (row[idCol] ?? "").trim() : "";
     if (teamId === "") {
       teamId = uniqueId(slugify(`${gym} ${team}`), taken);
@@ -528,6 +624,20 @@ export function emitSql(plan: ImportPlan, generatedAt = new Date()): string {
     "on conflict (id) do update set",
     ...updates.map((c) => `  ${c} = excluded.${c},`),
     "  schedule_version = public.meets.schedule_version + 1;",
+    "",
+    "-- CSV is the truth: a listed routine becomes 'scheduled' again, even one an operator",
+    "-- scratched today. Name those out loud so the producer can re-scratch them.",
+    "do $judgey$",
+    "declare t text;",
+    "begin",
+    "  select string_agg(team_id, ', ' order by team_id) into t from public.routines",
+    `  where meet_id = ${id} and status = 'scratched'`,
+    `    and team_id = any (${sqlArray(plan.routines.filter((r) => r.status === "scheduled").map((r) => r.teamId))});`,
+    "  if t is not null then",
+    "    raise notice 'Re-import UN-SCRATCHES: % (scratch them again in the app, or remove them from the CSV and re-import)', t;",
+    "  end if;",
+    "end",
+    "$judgey$;",
     "",
     "insert into public.routines (meet_id, team_id, team_name, gym, division, mat, scheduled_at, status) values",
     routines.join(",\n"),

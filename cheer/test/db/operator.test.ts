@@ -63,6 +63,48 @@ dbSuite("operator path", (ctx) => {
     assert.match(hash.code_hash, /^\$2a\$/);
   });
 
+  test("claim_operator: a meet-wide budget of 30 failures per rolling minute that new identities can't reset", async () => {
+    const { db } = ctx;
+    const meet = await seedMeet(db, [{ team: "a", at: 0 }], { operatorCode: CODE });
+    const other = await seedMeet(db, [{ team: "a", at: 0 }], { operatorCode: CODE });
+    const early = await operator(db, meet.id);
+    // Three fresh identities, ten wrong guesses each: each is then 'locked'.
+    const guessers = [user(), user(), user()];
+    for (const g of guessers) {
+      for (let i = 0; i < 10; i++)
+        assert.deepEqual(await claim(db, g, meet.id, `guess-${i}`), { ok: false, reason: "bad-code" });
+      assert.deepEqual(await claim(db, g, meet.id, CODE), { ok: false, reason: "locked" });
+    }
+    // A brand-new identity gets 'slow-down', even with the right code, and it isn't counted against it.
+    const fresh = user();
+    assert.deepEqual(await claim(db, fresh, meet.id, "guess-x"), { ok: false, reason: "slow-down" });
+    assert.deepEqual(await claim(db, fresh, meet.id, CODE), { ok: false, reason: "slow-down" });
+    const attempts = await db.one("select attempts from judgey_private.operator_attempts where meet_id = $1 and user_id = $2", [
+      meet.id,
+      fresh,
+    ]);
+    assert.equal(attempts.attempts, 0, "slow-down answers don't count against the identity");
+    const stored = await db.one("select cardinality(recent) as n from judgey_private.operator_failures where meet_id = $1", [meet.id]);
+    assert.equal(stored.n, 30, "the budget keeps at most 30 entries");
+    // Existing operators keep their rights; other meets are unaffected.
+    assert.deepEqual(await db.rpc(early, "op_set_status", { p_meet: meet.id, p_team: "a", p_status: "scheduled" }), { ok: true });
+    assert.deepEqual(await claim(db, user(), other.id, CODE), { ok: true });
+    // Rolling: once half the failures are over a minute old, guessing (and claiming) resumes.
+    await db.sql(
+      `update judgey_private.operator_failures
+       set recent = array(select case when o <= 15 then t - interval '61 seconds' else t end
+                          from unnest(recent) with ordinality u(t, o))
+       where meet_id = $1`,
+      [meet.id],
+    );
+    assert.deepEqual(await claim(db, fresh, meet.id, "guess-y"), { ok: false, reason: "bad-code" });
+    const pruned = await db.one("select cardinality(recent) as n from judgey_private.operator_failures where meet_id = $1", [meet.id]);
+    assert.equal(pruned.n, 16, "failures older than a minute are dropped");
+    assert.deepEqual(await claim(db, fresh, meet.id, CODE), { ok: true });
+    // The per-identity locks still hold after the meet-wide pause ends.
+    assert.deepEqual(await claim(db, guessers[0], meet.id, CODE), { ok: false, reason: "locked" });
+  });
+
   test("op_set_start: not-operator, unknown-team, set overrides the crowd, null clears start and taps", async () => {
     const { db } = ctx;
     const meet = await seedMeet(
@@ -87,7 +129,12 @@ dbSuite("operator path", (ctx) => {
     await db.rpc(user(), "tap_mat", { p_meet: meet.id, p_team: "a" });
     assert.equal((await db.sql("select * from public.routine_starts where meet_id = $1", [meet.id])).length, 1);
     const exact = meet.t0 - 4 * MINUTE + 123;
+    // A start never silently replaces another one: Clear first (review fix).
+    assert.deepEqual(await set(op, "a", exact), { ok: false, reason: "already-started" });
+    assert.equal((await db.one("select source from public.routine_starts where meet_id = $1", [meet.id])).source, "crowd");
+    assert.deepEqual(await set(op, "a", null), { ok: true });
     assert.deepEqual(await set(op, "a", exact), { ok: true });
+    assert.deepEqual(await set(op, "a", exact + 1), { ok: false, reason: "already-started" }, "operator starts too");
     let snap = await db.rpc("anon", "meet_snapshot", { p_meet: meet.id });
     assert.deepEqual(snap.starts, [{ teamId: "a", startedAt: exact, source: "operator" }]);
     // Crowd taps can no longer move it.
