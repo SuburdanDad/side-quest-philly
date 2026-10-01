@@ -1,0 +1,80 @@
+# Local Supabase-compatible stack for end-to-end testing Judgey without a cloud
+# project: real Supabase Postgres image, real GoTrue (anonymous sign-ins),
+# PostgREST, and an nginx gateway that mimics the /auth/v1 + /rest/v1 routes.
+# LOCAL USE ONLY: the JWT secret below is a public dev value.
+name: judgey-local
+
+x-secrets: &secrets
+  POSTGRES_PASSWORD: judgey-local-db
+  JWT_SECRET: judgey-local-dev-jwt-secret-at-least-32-chars
+
+services:
+  db:
+    image: supabase/postgres:17.6.1.084
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf -c log_min_messages=fatal
+    environment:
+      <<: *secrets
+      POSTGRES_HOST: /var/run/postgresql
+      PGPORT: 5432
+      POSTGRES_PORT: 5432
+      PGDATABASE: postgres
+      POSTGRES_DB: postgres
+      JWT_EXP: 3600
+    volumes:
+      - ./init/99-roles.sql:/docker-entrypoint-initdb.d/init-scripts/99-roles.sql:ro
+      - ./init/99-jwt.sql:/docker-entrypoint-initdb.d/init-scripts/99-jwt.sql:ro
+    ports:
+      - "54322:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-h", "localhost"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+
+  auth:
+    image: supabase/gotrue:v2.180.0
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: 9999
+      API_EXTERNAL_URL: http://localhost:54321/auth/v1
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:judgey-local-db@db:5432/postgres
+      GOTRUE_SITE_URL: http://localhost:3004
+      GOTRUE_URI_ALLOW_LIST: "*"
+      GOTRUE_DISABLE_SIGNUP: "false"
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_EXP: 43200
+      GOTRUE_JWT_SECRET: judgey-local-dev-jwt-secret-at-least-32-chars
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "false"
+      GOTRUE_EXTERNAL_ANONYMOUS_USERS_ENABLED: "true"
+      # Mirrors the meet-day setting from docs/meet-day-runbook.md.
+      GOTRUE_RATE_LIMIT_ANONYMOUS_USERS: ${GOTRUE_RATE_LIMIT_ANONYMOUS_USERS:-2000}
+    restart: unless-stopped
+
+  rest:
+    image: postgrest/postgrest:v12.2.12
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGRST_DB_URI: postgres://authenticator:judgey-local-db@db:5432/postgres
+      PGRST_DB_SCHEMAS: public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: judgey-local-dev-jwt-secret-at-least-32-chars
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+      PGRST_APP_SETTINGS_JWT_SECRET: judgey-local-dev-jwt-secret-at-least-32-chars
+      PGRST_APP_SETTINGS_JWT_EXP: 43200
+    restart: unless-stopped
+
+  gateway:
+    image: nginx:1.27-alpine
+    depends_on: [auth, rest]
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "54321:8000"
