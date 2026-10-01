@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Cheer app is a separate project (own package.json), migrating to its own repo.
+    "cheer/**",
   ]),
 ]);
 
