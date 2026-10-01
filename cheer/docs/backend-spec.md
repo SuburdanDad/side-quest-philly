@@ -61,6 +61,11 @@ export const RULES = {
 Definitions (identical in TS and SQL; all times are **integer epoch ms** in TS;
 SQL truncates every stored time to milliseconds with `date_trunc('milliseconds', …)`):
 
+- **Text order** (teamId, division) is UTF-8 byte order everywhere: `collate "C"` in SQL,
+  `compareIds` in TS (it compares code points, because plain `<` on UTF-16 code units
+  disagrees when an emoji meets a character in U+E000–U+FFFF). Never locale order.
+- **Scheduled order** on a mat: `scheduledAt`, then `teamId` (`C`) for exact ties
+  (the import keeps times strictly increasing per mat, so ties only occur in fixtures).
 - **Anchor of a mat:** the confirmed (non-scratched) routine with the latest
   `scheduledAt` on that mat. Drift = anchor.start − anchor.scheduledAt (0 if no anchor).
 - **Confirmed start** (`confirmedStart`): take the routine's taps with
@@ -71,6 +76,11 @@ SQL truncates every stored time to milliseconds with `date_trunc('milliseconds',
   The **counted taps** are those with `t[i] <= at <= c + freezeSeconds`. Start = their
   median: odd → middle; even → `Math.floor((a + b + 1) / 2)` of the two middles
   (integer ms; equals `Math.round` for positive values).
+  The database holds at most one tap per identity per routine (the first one accepted:
+  the primary key plus `on conflict do nothing`), and `tap_mat` never stores a too-early
+  tap, so `recompute_start`'s input is already "first tap per identity". A stored
+  `routine_starts` row is re-derived only when its routine accepts a tap: a re-import that
+  changes `min_taps` or a `scheduledAt` does not rewrite past starts.
 - **Operator starts override crowd starts.** An operator start is stored as-is.
 - **Tappable** (`tapRejection` returns null) for routine R on mat M at `now`:
   1. R exists → else `'unknown-team'`; R not scratched → else `'scratched'`.
@@ -79,7 +89,8 @@ SQL truncates every stored time to milliseconds with `date_trunc('milliseconds',
      the anchor in scheduled order (the first `tapLookahead` if there is no anchor),
      **plus** R itself if it is the anchor (more confirmations), **plus** up to
      `tapLookbehind` unconfirmed non-scratched routines immediately before the
-     anchor (late or swapped teams). R ∉ candidates → `'not-next'`.
+     anchor (the nearest ones, scanning back past confirmed routines; late or
+     swapped teams). R ∉ candidates → `'not-next'`.
   4. If R is not the anchor and the anchor exists: `now >= anchor.start + minGapSeconds`
      → else `'too-soon'`.
   5. (Server only) If R is confirmed by the crowd and `now > c + freezeSeconds + maxTapAgeSeconds`
@@ -262,18 +273,19 @@ exactly these grants:
   schedule: null | { meet: { id, name, venue, city, timeZone, startsAt, mats, minTaps },
                      routines: [{ teamId, teamName, gym, division, mat, scheduledAt, status }] },
                      -- included only when p_have_version <> scheduleVersion
-  starts: [{ teamId, startedAt, source }],
+  starts: [{ teamId, startedAt, source }],  -- non-scratched routines only (like confirmedStarts)
   board: MeetBoard }                       -- from judgey_private.team_tallies, rules §2
 ```
 Unknown meet → `null`. Polled every 15 s ± 3 s jitter while visible.
 
-### `my_state(p_meet text) → json` (authenticated)
+### `my_state(p_meet text) → json` (stable, authenticated)
 `{ serverNow, fan: null | { homeTeamIds, everHomeTeamIds }, tappedTeamIds: [], ballots: [{ teamId, stars, awards }], recaps: Recap[], isOperator }`
+(an unknown meet returns the same shape: `fan: null`, empty lists, `isOperator: false`).
 
 ### `check_in(p_meet text, p_home_team_ids text[]) → json`
 Dedupe; null or empty → `{}`; more than `maxHomeTeams` → `{ok:false, reason:'too-many'}`;
 an unknown or scratched id → `{ok:false, reason:'unknown-team'}`; unknown meet →
-`{ok:false, reason:'unknown-meet'}`. Lock the fans row (`for update`; insert if
+`{ok:false, reason:'unknown-meet'}` (checked first). Lock the fans row (`for update`; insert if
 missing). `ever = ever ∪ new`. For teams newly added to `ever` that the caller
 already has a ballot for: delete those ballots and decrement `team_tallies`.
 Upsert. Returns `{ ok:true, fan:{homeTeamIds, everHomeTeamIds}, removedBallotTeamIds }`.
@@ -286,7 +298,9 @@ without blocking ballot FK checks). Check `tapRejection` rules §2 against `at`
 (idempotent retries). Then `judgey_private.recompute_start(meet, team)`, which
 applies the confirmedStart algorithm over the routine's taps and upserts or deletes
 `routine_starts` (source 'crowd'; never touches operator rows).
-Returns `{ ok, reason?, confirmed, startedAt? }`.
+Rules 1–4 are judged at `at`; rule 5 at server `now()`. An unknown meet is `'unknown-team'`.
+Returns `{ ok, reason?, confirmed, startedAt? }`; `confirmed`/`startedAt` describe the
+routine's current start, on rejections too (e.g. `'already-confirmed'` carries it).
 
 ### `cast_ballot(p_meet text, p_team text, p_stars numeric, p_awards text[] default '{}') → json`
 Lock the fans row `for share`. Reasons in order:
@@ -299,18 +313,21 @@ containing null, or outside the enum). Normalize awards (distinct, sorted). Inse
 
 ### `touch(p_meet text, p_src text default null) → void`
 Insert into `visits` the 15-minute bucket of now() `on conflict do nothing`. Invalid
-src → null.
+src → null. Unknown meet → no-op.
 
 ### Operator path (the meet-day safety net)
 - `claim_operator(p_meet text, p_code text) → json {ok, reason?}`: at most 10 attempts
   per (meet, uid) (`'locked'`); `extensions.crypt(p_code, code_hash) = code_hash` →
-  insert into meet_operators. Reasons `'bad-code'`, `'locked'`, `'unknown-meet'`.
+  insert into meet_operators. Reasons `'bad-code'`, `'locked'`, `'unknown-meet'`. Only
+  wrong codes count as attempts (re-claiming with the right code stays `ok`); after 10
+  wrong ones even the right code is `'locked'`. A meet without a code → `'bad-code'`.
 - `op_set_start(p_meet text, p_team text, p_started_at_ms bigint) → json`: operator only
-  (`'not-operator'`). Non-null → upsert routine_starts with source 'operator'. Null →
+  (`'not-operator'`); unknown routine → `'unknown-team'`. Non-null → upsert routine_starts with source 'operator'. Null →
   delete the routine_starts row **and** that routine's taps (so the crowd can
   re-confirm cleanly). Ballots and tallies are untouched.
 - `op_set_status(p_meet text, p_team text, p_status text) → json`: operator only;
-  'scheduled' or 'scratched'; bumps `meets.schedule_version`.
+  'scheduled' or 'scratched' (else `'invalid'`; unknown routine → `'unknown-team'`);
+  bumps `meets.schedule_version` when the status actually changes.
 - Client operator mode is unlocked with `/?meet=<id>&op=<code>`. The code is claimed
   once, then removed from the URL (`history.replaceState`) and never stored. It shows
   "Start now", "Clear" and "Scratch/Unscratch" on every row.
@@ -329,12 +346,15 @@ src → null.
   local. Any error → non-zero exit and no SQL.
 - `team_id` = given, else a slug of `gym-team` (deduped). `--write-ids` writes the
   ids back into the CSV so they stay stable across revisions.
-- Emits idempotent SQL: upsert the meet (bump `schedule_version`), upsert routines;
-  routines present in the DB but missing from the CSV → `status = 'scratched'` (never
-  deleted). With `--operator-code`: upsert `judgey_private.operator_codes`
+- Emits idempotent SQL: upsert the meet (bump `schedule_version`), upsert routines
+  (listed ones become `'scheduled'` again); routines present in the DB but missing
+  from the CSV → `status = 'scratched'` (never deleted). `--venue`, `--city` and
+  `--min-taps` only overwrite when given. With `--operator-code` (at least 8
+  characters): upsert `judgey_private.operator_codes`
   using `extensions.crypt(code, extensions.gen_salt('bf'))`.
 - `--demo --start <ISO with offset>` emits the demo roster shifted to that start (for
-  practice meets). It refuses an ISO string without an explicit offset.
+  practice meets). It refuses an ISO string without an explicit offset. For a demo,
+  times outside 06:00–22:00 are only a warning. Also `npm run import:meet -- …`.
 
 ## 8. Client (`lib/`, `components/`, `app/`)
 
@@ -359,6 +379,11 @@ src → null.
   (`offset = serverNow − (sent + received) / 2`); `now = Date.now() + offset`.
   Freshness: "Live" if the last success was under 30 s ago, otherwise "Updated h:mm";
   "Offline · last known times" on failures. Never a blank screen.
+  *Client notes (v2.1):* the session is created only when needed (a check-in on this
+  device, a queued tap, a vote or an operator claim), so `my_state` and `touch` run
+  "on load" only once one exists. The 60 s `my_state` cadence counts from the last
+  attempt (failures don't retry in a loop). The offset uses the lowest-RTT sample of
+  the last 5. Before any response and with nothing cached the chip says "Connecting…".
 - **Tap outbox** (device store): `{meetId, teamId, tappedAt}`, at most one per
   routine. It sends `p_age_ms = Date.now() − tappedAt` on each attempt, retries
   every 5 s plus on visible/online, and is dropped after 120 s with a visible note.
@@ -372,19 +397,25 @@ src → null.
   and select by mode; never call hooks conditionally):
   `{ mode, meet, now, ready, freshness, starts, boards, teamById, checkedIn,
   homeTeamIds, myTappedTeamIds, pendingTaps, myBallots: Map<teamId,{stars,awards}>,
-  board: MeetBoard, recaps: Recap[], isOperator, dismissedAlerts,
+  board: MeetBoard, recaps: Recap[], isOperator, dismissedAlerts, notFound,
   actions: { checkIn, tap, vote(): Promise<BallotError|null>, dismissAlert, op? } }`.
+  Details (`lib/meet-view.ts`): `notFound` = live `meet_snapshot` returned null;
+  `pendingTaps: { teamId, state: 'sending'|'retrying'|'sent'|'failed', message?, at }[]`;
+  `vote(teamId, stars, awards)` resolves with the server's reason and **rejects** when
+  there's no signal; `op = { start(teamId), clear(teamId), setStatus(teamId, status) }`,
+  each resolving with an error message or null.
 - Routes: the vote route is dynamic (no `DEMO_MEET` / `notFound` / `generateStaticParams`);
   the team is resolved on the client from `MeetView.meet`. Check-in reads `?meet=`
   (QR and group-chat links), `?src=` (first-touch, stored) and `?op=`. With no meet
-  param it offers the demo meet. The meet picker / `listed` flag is cut.
+  param it shows the meet this device picked before, else the demo meet (a live meet
+  also links to the demo). The meet picker / `listed` flag is cut.
 - UI copy: the bell row says "Keep Judgey open for 60/20/5 heads-ups", and the
   absolute ETA is as prominent as the countdown. Skipped rows show "Not seen on the mat
   yet. Moved or scratched?". The mat chip shows "last confirmed h:mm" when the anchor is
   more than 20 min old. A "Send to another parent" share button (`&src=share`). Favorites
   shows "<Division> results land after its last routine" for pending divisions. Check-in
-  privacy line: "Anonymous. No names. Deleted 30 days after the meet." Demo clock UI only
-  in demo mode.
+  privacy line: "Anonymous. No names. Deleted 30 days after the meet." (the demo meet says
+  "Demo meet: nothing leaves this phone." instead). Demo clock UI only in demo mode.
 
 ## 9. Measuring the test day and retention
 
@@ -393,7 +424,9 @@ src → null.
   and home teams; first-touch `src = 'share'` count; taps per routine; time-to-confirm
   distribution.
 - Retention: `judgey_private.purge_meet(meet)` deletes fans/taps/ballots/visits
-  for a meet (it keeps meets, routines, routine_starts, team_tallies aggregates). The runbook
+  for a meet, plus its operator rows (codes, operators, attempts), and returns
+  `{fans, taps, ballots, visits}` counts (it keeps meets, routines, routine_starts,
+  team_tallies aggregates). The runbook
   schedules it plus `delete from auth.users where is_anonymous and created_at < now()
   − interval '30 days'` 30 days after the meet.
 
@@ -413,7 +446,10 @@ src → null.
   NULL inputs, concurrency (two connections tapping one routine at once → confirmed;
   check_in vs cast_ballot), and **parity**: randomized fixtures run through both
   `judgey_private.recompute_start` and TS `confirmedStart`, and through `meet_snapshot.board`
-  and TS `computeBoard`, which must be deep-equal.
+  and TS `computeBoard`, which must be deep-equal. Parity also sweeps the board, reveal,
+  recaps and tap gate over the day (every RULES boundary ±1 ms), and replays random
+  `check_in`/`cast_ballot` and `tap_mat`/`op_*` sequences against a model built from
+  `src/` (every response must match). `JUDGEY_PARITY_SEEDS` (default 24) scales it.
 - Local: `JUDGEY_TEST_DATABASE_URL=postgres://judgey_test:judgey@localhost:5432/postgres npm run test:db`.
 - Launch gate (after provisioning): migrations applied, advisors clean except the
   expected 0028/0029, auth config raised (`rate_limit_anonymous_users` ≥ 2000/h,

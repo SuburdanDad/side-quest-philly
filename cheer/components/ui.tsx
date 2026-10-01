@@ -69,3 +69,8 @@ export function Stars({ value, size = 16 }: { value: number; size?: number }) {
 export function SectionTitle({ children }: { children: ReactNode }) {
   return <h2 className="mt-8 mb-3 text-xs font-bold tracking-[0.18em] text-muted uppercase">{children}</h2>;
 }
+
+/** Placeholder block while the running order loads (never a blank screen). */
+export function Skeleton({ className = "" }: { className?: string }) {
+  return <div aria-hidden className={`rounded-3xl bg-surface-2 motion-safe:animate-pulse ${className}`} />;
+}

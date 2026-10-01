@@ -5,31 +5,34 @@ import Link from "next/link";
 import { ArrowLeft, Clock, Heart, Lock, PartyPopper, Star } from "lucide-react";
 import { findRow } from "@/src/board.ts";
 import { formatClock, formatMmSs } from "@/src/format.ts";
-import { AWARD_LABELS, OWN_TEAM_MESSAGE, validateBallot } from "@/src/voting.ts";
-import { AWARDS, type Award, type Ballot } from "@/src/types.ts";
-import { actions, currentDeviceId } from "@/lib/store";
+import { AWARD_LABELS, ballotDeadline, OWN_TEAM_MESSAGE } from "@/src/voting.ts";
+import { AWARDS, type Award } from "@/src/types.ts";
+import { OFFLINE_MESSAGE } from "@/lib/live-core";
 import { useMeet } from "@/lib/use-meet";
 import { Button, ButtonLink, Card, Chip, Stars } from "./ui";
 
 const STAR_WORDS = ["", "Nice!", "Solid!", "Great!", "Amazing!", "Flawless!"];
 
+/** The team comes from the meet on the client (live meets aren't known at build time). */
 export function Vote({ teamId }: { teamId: string }) {
-  const { boards, now, state, meet } = useMeet();
+  const { boards, now, meet, homeTeamIds, myBallots, actions } = useMeet();
   const [stars, setStars] = useState(0);
   const [awards, setAwards] = useState<Award[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
 
   const row = findRow(boards, teamId);
   if (!row) {
     return (
       <Card>
         <p className="font-display text-3xl uppercase">Team not found</p>
+        <p className="mt-1 text-sm text-muted">That team isn&apos;t on this meet&apos;s running order.</p>
         <BackLink />
       </Card>
     );
   }
   const { team } = row;
-  const myBallot = state.ballots.find((b) => b.teamId === teamId);
+  const myBallot = myBallots.get(teamId);
 
   const header = (
     <>
@@ -42,7 +45,7 @@ export function Vote({ teamId }: { teamId: string }) {
     </>
   );
 
-  if (state.homeTeamIds.includes(teamId)) {
+  if (homeTeamIds.includes(teamId)) {
     return (
       <>
         {header}
@@ -75,7 +78,7 @@ export function Vote({ teamId }: { teamId: string }) {
             </div>
           )}
           <p className="mt-4 text-sm text-muted">
-            Crowd Favorites update once voting closes for {team.name}.
+            Crowd Favorites for {team.division} land after its last routine.
           </p>
           <ButtonLink href="/meet/mats" variant="ghost" className="mt-5 w-full">
             Back to the mats
@@ -85,7 +88,9 @@ export function Vote({ teamId }: { teamId: string }) {
     );
   }
 
-  if (!row.votingOpen) {
+  // Someone mid-ballot when the window closes still gets the server's short grace.
+  const graceLeft = row.startedAt !== undefined && now <= ballotDeadline(row.startedAt) && stars > 0;
+  if (!row.votingOpen && !graceLeft) {
     const notYet = row.startedAt === undefined;
     return (
       <>
@@ -94,9 +99,11 @@ export function Vote({ teamId }: { teamId: string }) {
           {notYet ? <Clock size={40} className="mx-auto text-mat" /> : <Lock size={40} className="mx-auto text-muted" />}
           <p className="mt-3 font-display text-3xl uppercase">{notYet ? "Not on the mat yet" : "Voting closed"}</p>
           <p className="mt-2 text-sm text-muted">
-            {notYet
-              ? `Voting opens the moment ${team.name} takes the mat (around ${formatClock(row.eta.estimatedAt, meet.timeZone)}).`
-              : "Voting closes a few minutes after each routine. Catch the next one!"}
+            {row.eta.status === "scratched"
+              ? `${team.name} was scratched from the running order.`
+              : notYet
+                ? `Voting opens the moment ${team.name} takes the mat (around ${formatClock(row.eta.estimatedAt, meet.timeZone)}).`
+                : "Voting closes a few minutes after each routine. Catch the next one!"}
           </p>
         </Card>
       </>
@@ -107,32 +114,36 @@ export function Vote({ teamId }: { teamId: string }) {
     setAwards((cur) => (cur.includes(a) ? cur.filter((x) => x !== a) : [...cur, a]));
 
   async function submit() {
-    const ballot: Ballot = { deviceId: currentDeviceId(), teamId, stars, awards, castAt: now };
-    const err = validateBallot(ballot, {
-      profile: { deviceId: ballot.deviceId, homeTeamIds: state.homeTeamIds },
-      teamStartedAt: row!.startedAt,
-      existing: state.ballots,
-    });
-    if (err) {
-      setError(err.message);
-      return;
+    setSending(true);
+    setError(null);
+    try {
+      const err = await actions.vote(teamId, stars, awards);
+      if (err) {
+        setError(err.message);
+        return;
+      }
+      const confetti = (await import("canvas-confetti")).default;
+      confetti({
+        particleCount: 120,
+        spread: 75,
+        origin: { y: 0.7 },
+        colors: ["#ff3d8b", "#2ec4ff", "#ffc83d", "#f5f3ff"],
+        disableForReducedMotion: true,
+      });
+    } catch {
+      setError(OFFLINE_MESSAGE);
+    } finally {
+      setSending(false);
     }
-    actions.vote({ teamId, stars, awards, castAt: now });
-    const confetti = (await import("canvas-confetti")).default;
-    confetti({
-      particleCount: 120,
-      spread: 75,
-      origin: { y: 0.7 },
-      colors: ["#ff3d8b", "#2ec4ff", "#ffc83d", "#f5f3ff"],
-      disableForReducedMotion: true,
-    });
   }
 
   return (
     <>
       {header}
       <div className="mt-3">
-        <Chip tone="bow">Voting closes in {formatMmSs((row.votingClosesAt ?? now) - now)}</Chip>
+        <Chip tone="bow">
+          {row.votingOpen ? `Voting closes in ${formatMmSs((row.votingClosesAt ?? now) - now)}` : "Last call!"}
+        </Chip>
       </div>
 
       <Card className="mt-5">
@@ -175,9 +186,13 @@ export function Vote({ teamId }: { teamId: string }) {
         </div>
       </Card>
 
-      {error && <p className="mt-3 text-sm font-bold text-late">{error}</p>}
-      <Button className="mt-5 w-full" disabled={stars === 0} onClick={submit}>
-        {stars === 0 ? "Pick some stars" : "Send my cheer"}
+      {error && (
+        <p role="alert" className="mt-3 text-sm font-bold text-late">
+          {error}
+        </p>
+      )}
+      <Button className="mt-5 w-full" disabled={stars === 0 || sending} onClick={submit}>
+        {sending ? "Sending…" : stars === 0 ? "Pick some stars" : "Send my cheer"}
       </Button>
       <p className="mt-3 text-center text-xs text-muted">
         One cheer per routine. Only the top Crowd Favorites are ever shown, never the bottom.
@@ -188,7 +203,7 @@ export function Vote({ teamId }: { teamId: string }) {
 
 function BackLink() {
   return (
-    <Link href="/meet/mats" className="inline-flex h-10 items-center gap-1 text-sm font-bold text-muted">
+    <Link href="/meet/mats" className="inline-flex h-12 items-center gap-1 text-sm font-bold text-muted">
       <ArrowLeft size={16} /> Mats
     </Link>
   );

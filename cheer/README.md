@@ -17,20 +17,33 @@ stands.
 
 | Route | What it does |
 |---|---|
-| `/` | Check-in: "Which squad are you here to see?" (or "I'm just here to cheer") |
-| `/meet` | My Team: live ETA countdown, drift, 60/20/5-min alerts, open votes, mats at a glance |
-| `/meet/mats` | Running order per mat with live ETAs; "They just took the mat" tap |
-| `/meet/vote/[teamId]` | 1–5 stars + shout-outs; own-team block; voting window countdown |
-| `/meet/favorites` | Top-5 Crowd Favorites, shout-out winners, private recap for your teams |
+| `/` | Check-in: "Which squad are you here to see?" (or "I'm just here to cheer"). Reads `?meet=` (QR / group-chat links), `?src=` (first touch) and `?op=` (operator code, claimed once and stripped from the URL). No `?meet=`: the meet this phone picked before, else the demo |
+| `/meet` | My Team: ETA countdown and the absolute time, drift, 60/20/5-min heads-ups, skipped/scratched notices, "Send to another parent" share link, open votes, mats at a glance |
+| `/meet/mats` | Running order per mat; "&lt;Team&gt; just took the mat" tap (with an offline outbox), "Someone else on the mat?" for swaps, "last confirmed h:mm" when a mat goes quiet; Start now / Clear / Scratch for operators |
+| `/meet/vote/[teamId]` | 1–5 stars + shout-outs; own-team block; voting window countdown. Dynamic route: the team is resolved on the client |
+| `/meet/favorites` | Crowd Favorites (top half, max 5) per revealed division, shout-out winners, private recaps for your teams |
 
-## Demo mode
+## Demo and live mode
 
-There's no backend yet. The app runs a fictional meet with a **simulated
-crowd** (`src/demo/crowd.ts`) that taps teams onto the mat and votes, all
-driven by the meet clock. Tap the `DEMO` clock pill in the header to pause,
-run at 1× / 10× / 60×, restart, or change teams. This device's own taps, ballots
-and check-in are kept in localStorage (`lib/store.ts`); that store is where the
-realtime backend plugs in.
+**Demo (zero config).** With no env vars the app runs a fictional meet with a
+**simulated crowd** (`src/demo/crowd.ts`) that taps teams onto the mat and
+votes by the real rules, driven by the meet clock. Tap the `DEMO` clock pill in
+the header to pause, run at 1× / 10× / 60×, restart, or change teams. Nothing
+leaves the phone (`lib/sources/demo.ts`, state in `lib/store.ts`).
+
+**Live.** Copy `.env.example` to `.env.local` and set:
+
+| Variable | |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | New-style `sb_publishable_…` key |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Optional. Anonymous sign-in then sends a Turnstile token |
+
+Then open `/?meet=<id>` for a meet imported with `npm run import:meet`. Phones
+poll one public snapshot (`meet_snapshot`, every 15 s ± 3 s while visible) and
+sign in anonymously only when they check in, tap or vote. The ETA never waits
+on sign-in, and the last known times are cached per meet for bad arena signal.
+Operators open `/?meet=<id>&op=<code>`. Contract: `docs/backend-spec.md`.
 
 ## Code map
 
@@ -50,7 +63,7 @@ Requires Node ≥ 22.6 (tests run TypeScript natively).
 cd cheer
 npm install
 npm run dev        # http://localhost:3004
-npm test           # domain tests (node:test)
+npm test           # domain + client-core tests (node:test)
 npm run typecheck
 npm run lint
 npm run build

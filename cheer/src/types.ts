@@ -1,7 +1,7 @@
 // Core domain types. Teams only: no athlete names or photos (most athletes are minors).
 
 export type Minutes = number;
-/** Epoch milliseconds. */
+/** Epoch milliseconds (always an integer). */
 export type Timestamp = number;
 
 export interface Team {
@@ -22,13 +22,19 @@ export interface Meet {
   mats: string[];
   teams: Team[];
   slots: Slot[];
+  /** Distinct taps needed to confirm a start (default RULES.minTaps). */
+  minTaps?: number;
 }
+
+export type RoutineStatus = "scheduled" | "scratched";
 
 /** One routine on the published running order. */
 export interface Slot {
   teamId: string;
   mat: string;
   scheduledAt: Timestamp;
+  /** Missing means 'scheduled'. */
+  status?: RoutineStatus;
 }
 
 /** A spectator tapped "they just took the mat". */
@@ -41,7 +47,10 @@ export interface MatTap {
 /** Set at check-in: "Which squad are you here to see?" */
 export interface FanProfile {
   deviceId: string;
+  /** Teams followed right now (ETAs, alerts). Editable freely. */
   homeTeamIds: string[];
+  /** Every team ever followed at this meet; the own-team block keys on this. */
+  everHomeTeamIds: string[];
 }
 
 export const AWARDS = ["stunts", "tumbling", "spirit", "dance"] as const;

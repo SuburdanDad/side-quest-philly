@@ -7,6 +7,10 @@ const MINUTE = 60_000;
 const START = Date.UTC(2026, 11, 5, 14, 0);
 /** Gap between routines on the same mat, as published. */
 export const SLOT_MINUTES = 4;
+/** Mat 1 stops for a 25-minute awards break after its 9th routine, so a late mat can catch up. */
+export const BREAKS: Array<{ mat: string; afterRoutines: number; minutes: number }> = [
+  { mat: "1", afterRoutines: 9, minutes: 25 },
+];
 
 const ROSTER: Array<[mat: string, name: string, gym: string, division: string]> = [
   ["1", "Sapphire", "Liberty Elite", "Youth 2"],
@@ -48,7 +52,8 @@ function build(): Meet {
     perMat.set(mat, i + 1);
     // Mat 2 opens 10 minutes after mat 1.
     const offset = mat === "1" ? 0 : 10;
-    slots.push({ teamId: id, mat, scheduledAt: START + (offset + i * SLOT_MINUTES) * MINUTE });
+    const breaks = BREAKS.filter((b) => b.mat === mat && i >= b.afterRoutines).reduce((m, b) => m + b.minutes, 0);
+    slots.push({ teamId: id, mat, scheduledAt: START + (offset + i * SLOT_MINUTES + breaks) * MINUTE });
   }
   return {
     id: "winter-classic-2026",

@@ -1,15 +1,21 @@
 // A simulated arena crowd, so the demo feels live on a single phone.
 // Everything is a pure function of (meet, time): no randomness at runtime,
 // so the same moment always shows the same taps and ballots.
+// It plays by the real rules (docs/backend-spec.md §2): each routine is tapped
+// only once the previous one has been on the mat for minGapSeconds (routines
+// here are >= 3 min apart), and every ballot lands inside the voting window.
+// Crowd devices follow no teams, so none of their votes is an own-team vote.
 
+import { MINUTE, RULES, SECOND } from "../rules.ts";
+import { matOrder, usualGap } from "../schedule.ts";
 import { AWARDS, type Award, type Ballot, type MatTap, type Meet, type Timestamp } from "../types.ts";
-
-const MINUTE = 60_000;
-const SECOND = 1_000;
 
 /** How many minutes each mat slips per routine (mat 1 runs late, mat 2 roughly on time). */
 const SLIP_PER_ROUTINE: Record<string, number> = { "1": 1.6, "2": 0.4 };
 const MIN_GAP = 3 * MINUTE;
+/** Taps land 2, 6 and 10 s after the real start, so the confirmed start is real start + 6 s. */
+const TAP_OFFSETS = [2, 6, 10].map((s) => s * SECOND);
+const FIRST_VOTE = 45 * SECOND;
 const VOTING_SPREAD = 8 * MINUTE;
 
 /** Small deterministic PRNG seeded from a string. */
@@ -40,21 +46,25 @@ export function buildCrowdPlan(meet: Meet): CrowdPlan {
   const ballots: Ballot[] = [];
 
   for (const mat of meet.mats) {
-    const onMat = meet.slots
-      .filter((s) => s.mat === mat)
-      .sort((a, b) => a.scheduledAt - b.scheduledAt);
+    // Scratched teams never take the mat.
+    const onMat = matOrder(meet, mat);
+    const breakGap = usualGap(onMat) + RULES.breakExtraMinutes * MINUTE;
     let prev = -Infinity;
+    let sinceBreak = 0;
     onMat.forEach((slot, i) => {
+      // A scheduled break gives a late mat its time back: the slip starts over.
+      if (i > 0 && slot.scheduledAt - onMat[i - 1].scheduledAt > breakGap) sinceBreak = 0;
       const r = rng(`start:${slot.teamId}`);
-      const slip = (SLIP_PER_ROUTINE[mat] ?? 0.5) * i + (r() - 0.5);
+      const slip = (SLIP_PER_ROUTINE[mat] ?? 0.5) * sinceBreak + (r() - 0.5);
       const start = Math.max(slot.scheduledAt + Math.round(slip * MINUTE), prev + MIN_GAP);
       prev = start;
+      sinceBreak += 1;
       actualStart.set(slot.teamId, start);
 
       // Three fans in the stands tap within a few seconds of each other.
-      for (let k = 0; k < 3; k++) {
-        taps.push({ teamId: slot.teamId, deviceId: `crowd-${mat}-${k}`, at: start + (2 + k * 4) * SECOND });
-      }
+      TAP_OFFSETS.forEach((offset, k) => {
+        taps.push({ teamId: slot.teamId, deviceId: `crowd-${mat}-${k}`, at: start + offset });
+      });
 
       // Fans vote over the first few minutes after the routine starts.
       const tr = rng(`team:${slot.teamId}`);
@@ -70,7 +80,7 @@ export function buildCrowdPlan(meet: Meet): CrowdPlan {
           teamId: slot.teamId,
           stars,
           awards,
-          castAt: start + 45 * SECOND + Math.floor(vr() * VOTING_SPREAD),
+          castAt: start + FIRST_VOTE + Math.floor(vr() * VOTING_SPREAD),
         });
       }
     });
