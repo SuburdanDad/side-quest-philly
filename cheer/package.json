@@ -17,7 +17,10 @@
     "typecheck:domain": "tsc --noEmit -p tsconfig.domain.json",
     "test:db": "node --experimental-strip-types --no-warnings --test test/db/*.test.ts",
     "import:meet": "node --experimental-strip-types --no-warnings scripts/import-meet.ts",
-    "test:e2e:live": "node test/e2e/live.e2e.mjs"
+    "test:e2e:live": "node test/e2e/live.e2e.mjs",
+    "local:up": "bash supabase/local/up.sh",
+    "local:practice": "bash supabase/local/practice.sh",
+    "local:down": "docker compose -f supabase/local/docker-compose.yml down"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",

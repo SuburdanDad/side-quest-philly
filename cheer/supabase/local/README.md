@@ -9,7 +9,12 @@ Runs the same software as production, locally in Docker:
 | Data API | `postgrest/postgrest:v12.2.12` | via gateway |
 | Gateway (`/auth/v1`, `/rest/v1`) | `nginx:1.27-alpine` | 54321 |
 
+Needs Docker Desktop running and Node 22.6+. No `psql` needed: the scripts use the one inside the database container.
+
 ```bash
+npm run local:up              # start + apply migrations + write .env.local
+npm run local:practice        # practice meet starting in 2 min; prints parent + operator links
+npm run local:down            # stop
 supabase/local/up.sh          # start + apply migrations + write .env.local
 supabase/local/up.sh --reset  # wipe the local DB first
 npm run dev                   # app now runs in live mode against the local stack
